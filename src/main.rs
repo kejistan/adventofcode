@@ -4,8 +4,8 @@ use std::io::BufReader;
 use regex::Regex;
 
 struct Rule {
-  min: usize,
-  max: usize,
+  index_one: usize,
+  index_two: usize,
   character: char,
 }
 
@@ -16,8 +16,8 @@ fn main() -> io::Result<()> {
   let count = reader.lines().map(Result::unwrap).filter(|line| {
     let captures = line_regex.captures(&line).unwrap();
     let rule = Rule {
-      min: str::parse::<usize>(&captures[1]).unwrap(),
-      max: str::parse::<usize>(&captures[2]).unwrap(),
+      index_one: str::parse::<usize>(&captures[1]).unwrap() - 1,
+      index_two: str::parse::<usize>(&captures[2]).unwrap() - 1,
       character: captures[3].chars().next().unwrap(),
     };
 
@@ -31,7 +31,9 @@ fn main() -> io::Result<()> {
 
 impl Rule {
   fn check_password(&self, password: &str) -> bool {
-    let count = password.chars().filter(|&c| c == self.character).count();
-    count >= self.min && count <= self.max
+    let characters = password.chars().collect::<Vec<char>>();
+    let index_one_match = characters.get(self.index_one).map(|&character| character == self.character).unwrap_or(false);
+    let index_two_match = characters.get(self.index_two).map(|&character| character == self.character).unwrap_or(false);
+    index_one_match ^ index_two_match
   }
 }

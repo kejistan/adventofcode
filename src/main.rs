@@ -1,18 +1,37 @@
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
-use itertools::Itertools;
+use regex::Regex;
+
+struct Rule {
+  min: usize,
+  max: usize,
+  character: char,
+}
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
 
-  let numbers = reader.lines().map(Result::unwrap).map(|line| line.parse::<i32>().unwrap()).collect::<Vec<i32>>();
-  let result = numbers.iter().cartesian_product(numbers.iter()).cartesian_product(numbers.iter()).find(|((&a, &b), &c)| {
-    a + b + c == 2020
-  });
-  match result {
-    Some(((a, b), c)) => println!("{} * {} * {} = {}", a, b, c, a * b * c),
-    None => println!("no result found"),
-  }
+  let line_regex = Regex::new(r"(\d+)-(\d+) (.): (.+$)").unwrap();
+  let count = reader.lines().map(Result::unwrap).filter(|line| {
+    let captures = line_regex.captures(&line).unwrap();
+    let rule = Rule {
+      min: str::parse::<usize>(&captures[1]).unwrap(),
+      max: str::parse::<usize>(&captures[2]).unwrap(),
+      character: captures[3].chars().next().unwrap(),
+    };
+
+    let password = &captures[4];
+    rule.check_password(password)
+  }).count();
+
+  println!("{} matched passwords", count);
   Ok(())
+}
+
+impl Rule {
+  fn check_password(&self, password: &str) -> bool {
+    let count = password.chars().filter(|&c| c == self.character).count();
+    count >= self.min && count <= self.max
+  }
 }

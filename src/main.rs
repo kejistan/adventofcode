@@ -2,20 +2,74 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
+struct Slope {
+  x: usize,
+  y: usize,
+}
+
+struct TrajectoryState {
+  slope: Slope,
+  x: usize,
+  y: usize,
+  trees: i32,
+}
+
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
 
-  let (_, count) = reader.lines().map(Result::unwrap).map(|line| {
-    line.chars().map(|c| c != '.').collect::<Vec<bool>>()
-  }).fold((0, 0), |(x, count), line| {
-    let next = x + 3;
-    if line[x % line.len()] {
-      (next, count + 1)
-    } else {
-      (next, count)
-    }
-  });
+  let slopes = vec![
+    Slope {
+      x: 1,
+      y: 1,
+    },
+    Slope {
+      x: 3,
+      y: 1,
+    },
+    Slope {
+      x: 5,
+      y: 1,
+    },
+    Slope {
+      x: 7,
+      y: 1,
+    },
+    Slope {
+      x: 1,
+      y: 2,
+    },
+  ];
 
-  println!("{} trees on slope (1, 3)", count);
+  let trees = reader.lines().map(Result::unwrap).map(|line| {
+    line.chars().map(|c| c != '.').collect::<Vec<bool>>()
+  }).collect::<Vec<Vec<bool>>>();
+
+  let result = slopes.into_iter().map(|slope| TrajectoryState {
+    slope: slope,
+    x: 0,
+    y: 0,
+    trees: 0,
+  }).map(|mut trajectory| {
+    while trajectory.y < trees.len() {
+      let row = &trees[trajectory.y];
+      trajectory.advance(row[trajectory.x % row.len()])
+    }
+
+    println!("{} trees on slope ({}, {})", trajectory.trees, trajectory.slope.x, trajectory.slope.y);
+    trajectory.trees
+  }).fold(1, |product, count| product * count);
+
+  println!("result {}", result);
   Ok(())
+}
+
+impl TrajectoryState {
+  fn advance(&mut self, hit_tree: bool) {
+    if hit_tree {
+      self.trees += 1;
+    }
+
+    self.x += self.slope.x;
+    self.y += self.slope.y;
+  }
 }

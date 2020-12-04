@@ -1,75 +1,50 @@
+use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-struct Slope {
-  x: usize,
-  y: usize,
-}
-
-struct TrajectoryState {
-  slope: Slope,
-  x: usize,
-  y: usize,
-  trees: i32,
-}
-
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
 
-  let slopes = vec![
-    Slope {
-      x: 1,
-      y: 1,
-    },
-    Slope {
-      x: 3,
-      y: 1,
-    },
-    Slope {
-      x: 5,
-      y: 1,
-    },
-    Slope {
-      x: 7,
-      y: 1,
-    },
-    Slope {
-      x: 1,
-      y: 2,
-    },
-  ];
-
-  let trees = reader.lines().map(Result::unwrap).map(|line| {
-    line.chars().map(|c| c != '.').collect::<Vec<bool>>()
-  }).collect::<Vec<Vec<bool>>>();
-
-  let result = slopes.into_iter().map(|slope| TrajectoryState {
-    slope: slope,
-    x: 0,
-    y: 0,
-    trees: 0,
-  }).map(|mut trajectory| {
-    while trajectory.y < trees.len() {
-      let row = &trees[trajectory.y];
-      trajectory.advance(row[trajectory.x % row.len()])
+  let mut normalized_passport_info: Vec<String> = Vec::new();
+  let mut valid_count = 0;
+  for line in reader.lines() {
+    let string = line.unwrap();
+    if string.is_empty() {
+      if validate_passport(&normalized_passport_info) {
+        valid_count += 1;
+      }
+      normalized_passport_info.clear();
     }
 
-    println!("{} trees on slope ({}, {})", trajectory.trees, trajectory.slope.x, trajectory.slope.y);
-    trajectory.trees
-  }).fold(1, |product, count| product * count);
+    for string in string.split_whitespace() {
+      normalized_passport_info.push(string.to_string());
+    }
+  }
+  if validate_passport(&normalized_passport_info) {
+    valid_count += 1;
+  }
 
-  println!("result {}", result);
+  println!("{} valid passports", valid_count);
   Ok(())
 }
 
-impl TrajectoryState {
-  fn advance(&mut self, hit_tree: bool) {
-    if hit_tree {
-      self.trees += 1;
-    }
+fn validate_passport(passport_info: &Vec<String>) -> bool {
+  let mut fields = HashMap::with_capacity(8);
+  fields.insert("byr", false);
+  fields.insert("iyr", false);
+  fields.insert("eyr", false);
+  fields.insert("hgt", false);
+  fields.insert("hcl", false);
+  fields.insert("ecl", false);
+  fields.insert("pid", false);
+  fields.insert("cid", true);
 
-    self.x += self.slope.x;
-    self.y += self.slope.y;
+  for string in passport_info {
+    if let Some(val) = fields.get_mut(&string[0..3]) {
+      *val = true;
+    }
   }
+
+  fields.values().fold(true, |result, &field| result && field)
 }

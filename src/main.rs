@@ -12,7 +12,7 @@ fn main() -> io::Result<()> {
   for l in reader.lines() {
     if let Ok(line) = l {
       if line.is_empty() {
-        total += answers.iter().filter(|(_, &count)| count == group_size).count();
+        total += count_answers(&answers, group_size);
         answers.clear();
         group_size = 0;
       } else {
@@ -29,8 +29,12 @@ fn main() -> io::Result<()> {
       panic!()
     }
   }
-  total += answers.len();
+  total += count_answers(&answers, group_size);
 
   println!("Total answers: {}", total);
   Ok(())
+}
+
+fn count_answers(answers: &HashMap<char, i32>, group_size: i32) -> usize {
+  answers.iter().filter(|(_, &count)| count == group_size).count()
 }

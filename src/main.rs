@@ -39,28 +39,84 @@ fn main() -> io::Result<()> {
     }
   }).collect::<Vec<Instruction>>();
 
-  let mut accumulator = 0;
-  let mut pc = 0;
-
+  let mut target = 0;
   loop {
-    let instruction = instructions.get_mut(pc).unwrap();
-    if instruction.visited {
+    if target >= instructions.len() {
+      panic!("fix not found!");
+    }
+
+    toggle_instruction_at(&mut instructions, target);
+    target += 1;
+
+    // reset instruction state
+    for instruction in instructions.iter_mut() {
+      instruction.visited = false;
+    }
+
+    let (success, accumulator) = run_instructions(&mut instructions);
+    if success {
+      println!("accumulator: {}", accumulator);
       break;
     }
 
-    instruction.visited = true;
+    toggle_instruction_at(&mut instructions, target - 1);
+  }
 
-    match instruction.op {
-      Operation::NOP => pc += 1,
-      Operation::ACC => {
-        accumulator += instruction.operand;
-        pc += 1;
+  Ok(())
+}
+
+fn run_instructions(instructions: &mut Vec<Instruction>) -> (bool, isize) {
+  let mut pc = 0;
+  let mut accumulator = 0;
+  loop {
+    match instructions.get_mut(pc) {
+      None => break,
+      Some(instruction) => {
+        if instruction.visited {
+          break;
+        }
+
+        instruction.visited = true;
+
+        match instruction.op {
+          Operation::NOP => pc += 1,
+          Operation::ACC => {
+            accumulator += instruction.operand;
+            pc += 1;
+          },
+          Operation::JMP => {
+            let new_pc = (pc as isize) + instruction.operand;
+            if new_pc < 0 {
+              break;
+            } else {
+              pc = new_pc as usize;
+            }
+          }
+        }
       },
-      Operation::JMP => pc = ((pc as isize) + instruction.operand) as usize,
     }
   }
 
-  println!("accumulator: {}", accumulator);
+  if pc == instructions.len() {
+    (true, accumulator)
+  } else {
+    (false, accumulator)
+  }
+}
 
-  Ok(())
+fn toggle_instruction_at(instructions: &mut Vec<Instruction>, target: usize) {
+  let instruction = match instructions.get_mut(target) {
+    None => panic!("None for target {}", target),
+    Some(i) => i,
+  };
+
+  match instruction.op {
+    Operation::ACC => (),
+    Operation::JMP => {
+      instruction.op = Operation::NOP
+    },
+    Operation::NOP => {
+      instruction.op = Operation::JMP
+    },
+  }
 }

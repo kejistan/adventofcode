@@ -1,39 +1,31 @@
-use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
-use circular_queue::CircularQueue;
-
-struct Entry {
-  number: i32,
-  sum_cache: HashSet<i32>,
-}
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
 
   let numbers = reader.lines().map(|l| l.unwrap().parse::<i32>().unwrap());
 
-  let window_size = 25;
-  let mut window: CircularQueue<Entry> = CircularQueue::with_capacity(window_size);
+  let target = 41682220;
+  let mut window: VecDeque<i32> = VecDeque::new();
   for number in numbers {
-    for entry in window.iter_mut() {
-      entry.sum_cache.insert(entry.number + number);
-    }
-
-    if window.is_full() {
-      let mut result = false;
-      for entry in window.iter() {
-        result = result || entry.sum_cache.contains(&number);
-      }
-
-      if !result {
-        println!("invalid entry {}", number);
-        break;
+    window.push_back(number);
+    let mut sum: i32 = window.iter().sum();
+    
+    while sum > target {
+      if let Some(popped) = window.pop_front() {
+        sum -= popped;
       }
     }
 
-    window.push(Entry { number: number, sum_cache: HashSet::new() });
+    if sum == target {
+      let min = window.iter().min().unwrap();
+      let max = window.iter().max().unwrap();
+      println!("{} + {} = {}", min, max, min + max);
+      break;
+    }
   }
 
   Ok(())

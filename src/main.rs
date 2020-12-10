@@ -8,7 +8,6 @@ fn main() -> io::Result<()> {
 
   let mut adapters = reader.lines().map(|l| l.unwrap().parse::<i32>().unwrap()).collect::<Vec<i32>>();
   adapters.sort();
-  adapters.push(adapters.last().unwrap() + 3);
 
   let mut window: VecDeque<(u64, i32)> = VecDeque::with_capacity(3);
   window.push_back((1, 0));

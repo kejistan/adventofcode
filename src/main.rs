@@ -2,6 +2,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
+#[derive(PartialEq)]
 enum Position {
   Occupied,
   Empty,
@@ -22,9 +23,80 @@ fn main() -> io::Result<()> {
     }).collect::<Vec<Position>>()
   ).collect::<Vec<Vec<Position>>>();
 
+  let mut positions_to_check = Vec::with_capacity(rows.len());
+  for row in rows.iter() {
+    let mut pos_rows: Vec<Vec<(usize, usize)>> = Vec::with_capacity(row.len());
+    for _ in 0..row.len() {
+      pos_rows.push(vec![]);
+    }
+    positions_to_check.push(pos_rows);
+  }
+
+  let width = rows.first().unwrap().len();
+  let mut prev_vertical: Vec<Option<usize>> = Vec::with_capacity(width);
+  for _ in 0..width {
+    prev_vertical.push(None);
+  }
+
+  for (y, row) in rows.iter().enumerate() {
+    let seats_iterator = row.iter().enumerate().filter(|(_, pos)| **pos != Position::Floor);
+
+    // horizontal scan
+    let mut prev_horizontal: Option<usize> = None;
+    for (x, _) in seats_iterator {
+      match prev_horizontal {
+        None => (),
+        Some(prev_x) => {
+          positions_to_check[y][prev_x].push((x, y));
+          positions_to_check[y][x].push((prev_x, y));
+        }
+      }
+      prev_horizontal = Some(x);
+
+      // vertical scan
+      match prev_vertical[x] {
+        None => (),
+        Some(prev_y) => {
+          positions_to_check[prev_y][x].push((x, y));
+          positions_to_check[y][x].push((x, prev_y));
+        }
+      }
+      prev_vertical[x] = Some(y);
+
+      // diagonal scans are dumb
+      let mut next_x = x + 1;
+      let mut next_y = y + 1;
+      while next_x < row.len() && next_y < rows.len() {
+        if rows[next_y][next_x] != Position::Floor {
+          positions_to_check[y][x].push((next_x, next_y));
+          positions_to_check[next_y][next_x].push((x, y));
+          break;
+        }
+
+        next_x += 1;
+        next_y += 1;
+      }
+
+      // bit of a hack, pre-decrement x for easier unsigned math
+      next_x = x;
+      next_y = y + 1;
+      while next_x != 0 && next_y < rows.len() {
+        next_x -= 1;
+
+        if rows[next_y][next_x] != Position::Floor {
+          positions_to_check[y][x].push((next_x, next_y));
+          positions_to_check[next_y][next_x].push((x, y));
+          break;
+        }
+
+        next_y += 1;
+      }
+    }
+  }
+
   let mut stabilized = false;
   while !stabilized {
-    let (changed, new_rows) = step(rows);
+    let (changed, new_rows) = step(rows, &positions_to_check);
     stabilized = !changed;
     rows = new_rows;
   }
@@ -43,16 +115,16 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
-fn step(rows: Vec<Vec<Position>>) -> (bool, Vec<Vec<Position>>) {
+fn step(rows: Vec<Vec<Position>>, positions_to_check: &Vec<Vec<Vec<(usize, usize)>>>) -> (bool, Vec<Vec<Position>>) {
   let mut changed = false;
   let mut new_rows: Vec<Vec<Position>> = Vec::with_capacity(rows.len());
-  for (x, row) in rows.iter().enumerate() {
+  for (y, row) in rows.iter().enumerate() {
     let mut new_row = Vec::with_capacity(row.len());
-    for (y, pos) in row.iter().enumerate() {
+    for (x, pos) in row.iter().enumerate() {
       match pos {
         Position::Floor => new_row.push(Position::Floor),
         Position::Empty => {
-          if count_adjacent(x, y, &rows) == 0 {
+          if count_occupied(&rows, &positions_to_check[y][x]) == 0 {
             changed = true;
             new_row.push(Position::Occupied)
           } else {
@@ -60,7 +132,7 @@ fn step(rows: Vec<Vec<Position>>) -> (bool, Vec<Vec<Position>>) {
           }
         },
         Position::Occupied => {
-          if count_adjacent(x, y, &rows) >= 4 {
+          if count_occupied(&rows, &positions_to_check[y][x]) >= 5 {
             changed = true;
             new_row.push(Position::Empty)
           } else {
@@ -75,45 +147,14 @@ fn step(rows: Vec<Vec<Position>>) -> (bool, Vec<Vec<Position>>) {
   (changed, new_rows)
 }
 
-fn count_adjacent(x: usize, y: usize, rows: &Vec<Vec<Position>>) -> usize {
+fn count_occupied(rows: &Vec<Vec<Position>>, positions_to_check: &Vec<(usize, usize)>) -> usize {
   let mut count = 0;
-  let min_x = if x == 0 { x } else { x - 1 };
-  let max_x = if x + 1 == rows.len() { x } else { x + 1 };
-  let min_y = if y == 0 { y } else { y - 1 };
-  let max_y = if y + 1 == rows[x].len() { y } else { y + 1 };
 
-  for (offset_x, row) in rows[min_x..=max_x].iter().enumerate() {
-    for (offset_y, pos) in row[min_y..=max_y].iter().enumerate() {
-      if min_x + offset_x == x && min_y + offset_y == y {
-        continue;
-      }
-
-      match pos {
-        Position::Occupied => count += 1,
-        _ => (),
-      }
+  for (x, y) in positions_to_check {
+    if rows[*y][*x] == Position::Occupied {
+      count += 1;
     }
   }
-  
+
   count
-}
-
-fn print_rows(rows: &[Vec<Position>]) {
-  for row in rows {
-    for pos in row {
-      print!("{}", pos);
-    }
-    println!("");
-  }
-}
-
-impl std::fmt::Display for Position {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let character = match self {
-      Position::Empty => 'L',
-      Position::Floor => '.',
-      Position::Occupied => '#',
-    };
-    write!(f, "{}", character)
-  }
 }

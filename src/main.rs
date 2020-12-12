@@ -2,7 +2,6 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-#[derive(PartialEq)]
 enum Direction {
   North,
   East,
@@ -12,7 +11,6 @@ enum Direction {
   Right,
   Forward,
 }
-
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
@@ -36,26 +34,15 @@ fn main() -> io::Result<()> {
     (direction, value)
   });
 
-  let (_, pos) = instructions.fold((0 as i32, (0 as i32, 0 as i32)), |(heading, pos), (dir, value)| {
-    let mut direction = dir;
-    if direction == Direction::Forward {
-      direction = match heading.rem_euclid(360) {
-        0 => Direction::East,
-        90 => Direction::North,
-        180 => Direction::West,
-        270 => Direction::South,
-        _ => panic!("{}", heading),
-      }
-    }
-
+  let (_, pos) = instructions.fold(((10, 1), (0, 0)), |(waypoint, pos), (direction, value)| {
     match direction {
-      Direction::North => (heading, (value + pos.0, pos.1)),
-      Direction::East => (heading, (pos.0, value + pos.1)),
-      Direction::South => (heading, (pos.0 - value, pos.1)),
-      Direction::West => (heading, (pos.0, pos.1 - value)),
-      Direction::Left => (heading + value, pos),
-      Direction::Right => (heading - value, pos),
-      Direction::Forward => panic!(),
+      Direction::North => ((waypoint.0, waypoint.1 + value), pos),
+      Direction::East => ((waypoint.0 + value, waypoint.1), pos),
+      Direction::South => ((waypoint.0, waypoint.1 - value), pos),
+      Direction::West => ((waypoint.0 - value, waypoint.1), pos),
+      Direction::Left => (rotate(waypoint, value), pos),
+      Direction::Right => (rotate(waypoint, -value), pos),
+      Direction::Forward => (waypoint, (pos.0 + value * waypoint.0, pos.1 + value * waypoint.1)),
     }
   });
 
@@ -63,4 +50,15 @@ fn main() -> io::Result<()> {
   println!("{}", distance);
 
   Ok(())
+}
+
+fn rotate(pos: (i32, i32), degrees: i32) -> (i32, i32) {
+  let (x, y) = pos;
+  match degrees.rem_euclid(360) {
+    0 => (x, y),
+    90 => (-y, x),
+    180 => (-x, -y),
+    270 => (y, -x),
+    _ => panic!("{}", degrees),
+  }
 }

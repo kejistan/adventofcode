@@ -5,24 +5,26 @@ use std::io::BufReader;
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
 
-  let mut lines = reader.lines();
-  let minimum = lines.next().unwrap().unwrap().parse::<i32>().unwrap();
-  let buses = lines.next().unwrap().unwrap().split_terminator(',')
-    .filter(|bus| *bus != "x")
-    .map(|bus| bus.parse::<i32>().unwrap())
-    .collect::<Vec<i32>>();
+  let buses = reader.lines().skip(1).next().unwrap().unwrap().split_terminator(',')
+    .enumerate()
+    .filter(|(_, bus)| *bus != "x")
+    .map(|(i, bus)| (i, bus.parse::<i32>().unwrap()))
+    .collect::<Vec<(usize, i32)>>();
 
-  let mut target = minimum;
-  loop {
-    for bus in buses.iter() {
-      if target % bus == 0 {
-        println!("bus {} at {}", bus, target);
-        let wait = target - minimum;
-        println!("wait {}", wait);
-        println!("result: {}", wait * bus);
-        return Ok(());
+    let mut stride = 1;
+    let mut valid_timestamp: u64 = 0;
+
+    for (offset, bus) in buses {
+      let mut search_offset = 0;
+      while (valid_timestamp + search_offset + offset as u64) % bus as u64 != 0 {
+        search_offset += stride;
       }
+
+      valid_timestamp += search_offset;
+      stride *= bus as u64;
     }
-    target += 1;
-  }
+
+    println!("{}", valid_timestamp);
+
+    Ok(())
 }

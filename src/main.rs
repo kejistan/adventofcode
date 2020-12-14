@@ -5,7 +5,7 @@ use std::io::BufReader;
 use regex::Regex;
 
 enum Instruction {
-  Mask(u64, u64),
+  Mask(String),
   Mem(u64, u64),
 }
 
@@ -19,29 +19,26 @@ fn main() -> io::Result<()> {
     if let Some(captures) = mem_regex.captures(line.as_str()) {
       Instruction::Mem(captures[1].parse::<u64>().unwrap(), captures[2].parse::<u64>().unwrap())
     } else if let Some(captures) = mask_regex.captures(line.as_str()) {
-      let (or, and) = captures[1].chars().fold((0, u64::MAX), |(or, and), bit| {
-        match bit {
-          'X' => (or << 1, (and << 1) + 1),
-          '0' => (or << 1, and << 1),
-          '1' => ((or << 1) + 1, (and << 1) + 1),
-          _ => panic!(),
-        }
-      });
-      Instruction::Mask(or, and)
+      Instruction::Mask(captures[1].to_string())
     } else {
       panic!();
     }
   });
 
   let mut memory = HashMap::new();
-  let mut mask = (0, u64::MAX);
+  let mut masks = Vec::new();
+  masks.push((0, u64::MAX));
 
   for instruction in instructions {
     match instruction {
-      Instruction::Mask(or, and) => mask = (or, and),
+      Instruction::Mask(string) => {
+        masks = masks_to_write(&string);
+      },
       Instruction::Mem(address, num) => {
-        let actual = (num | mask.0) & mask.1;
-        memory.insert(address, actual);
+        let addresses = masks.iter().map(|(or, and)| (address | or) & and);
+        for addr in addresses {
+          memory.insert(addr, num);
+        }
       }
     }
   }
@@ -51,4 +48,41 @@ fn main() -> io::Result<()> {
   println!("{}", result);
 
   Ok(())
+}
+
+fn masks_to_write(mask: &str) -> Vec<(u64, u64)> {
+  let mut masks = Vec::new();
+  masks.push((0, u64::MAX));
+
+  for character in mask.chars() {
+    match character {
+      '0' => {
+        for (or, and) in masks.iter_mut() {
+          *or = *or << 1;
+          *and = (*and << 1) + 1;
+        }
+      }
+      '1' => {
+        for (or, and) in masks.iter_mut() {
+          *or = (*or << 1) + 1;
+          *and = (*and << 1) + 1;
+        }
+      }
+      'X' => {
+        for (or, and) in masks.iter_mut() {
+          *or = (*or << 1) + 1;
+          *and = (*and << 1) + 1;
+        }
+        let mut alternates = Vec::with_capacity(masks.len());
+        for (or, and) in masks.iter() {
+          alternates.push((*or & (u64::MAX - 1), and & (u64::MAX - 1)));
+        }
+
+        masks.append(&mut alternates);
+      }
+      _ => panic!(),
+    }
+  }
+
+  masks
 }

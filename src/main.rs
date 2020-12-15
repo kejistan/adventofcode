@@ -12,7 +12,7 @@ fn main() -> io::Result<()> {
   }
 
   let mut next = 0;
-  while turn_number < 2020 {
+  while turn_number < 30000000 {
     if let Some(prev) = numbers.insert(next, turn_number) {
       next = turn_number - prev;
     } else {

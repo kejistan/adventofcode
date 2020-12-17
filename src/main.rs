@@ -4,7 +4,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-type Coordinate = (i32, i32, i32);
+type Coordinate = (i32, i32, i32, i32);
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
@@ -14,7 +14,7 @@ fn main() -> io::Result<()> {
     for (x, c) in line.chars().enumerate() {
       match c {
         '#' => {
-          universe.insert((x as i32, y as i32, 0));
+          universe.insert((x as i32, y as i32, 0, 0));
         }
         _ => (),
       }
@@ -52,10 +52,12 @@ fn increment_neighbors(counts: &mut HashMap<Coordinate, u8>, coordinate: Coordin
   }
 }
 
-fn neighbors((x, y, z): Coordinate) -> impl std::iter::Iterator<Item=Coordinate> {
-  (z-1..=z+1).flat_map(move |nz| {
-    (y-1..=y+1).flat_map(move |ny| {
-      (x-1..=x+1).map(move |nx| (nx, ny, nz))
+fn neighbors((x, y, z, w): Coordinate) -> impl std::iter::Iterator<Item=Coordinate> {
+  (w-1..=w+1).flat_map(move |nw| {
+    (z-1..=z+1).flat_map(move |nz| {
+      (y-1..=y+1).flat_map(move |ny| {
+        (x-1..=x+1).map(move |nx| (nx, ny, nz, nw))
+      })
     })
-  }).filter(move |(nx, ny, nz)| x != *nx || y != *ny || z != *nz)
+  }).filter(move |(nx, ny, nz, nw)| x != *nx || y != *ny || z != *nz || w != *nw)
 }

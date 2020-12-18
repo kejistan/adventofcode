@@ -1,63 +1,114 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-type Coordinate = (i32, i32, i32, i32);
+#[derive(Debug)]
+enum Token {
+  Num(u64),
+  Sum,
+  Mul,
+  Open,
+  Close,
+}
+
+use Token::*;
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
-  let mut universe = HashSet::new();
-  for (y, l) in reader.lines().enumerate() {
-    let line = l.unwrap();
-    for (x, c) in line.chars().enumerate() {
-      match c {
-        '#' => {
-          universe.insert((x as i32, y as i32, 0, 0));
-        }
-        _ => (),
-      }
-    }
+ 
+  let mut result = 0;
+  for l in reader.lines() {
+    let tokens = tokenize(&l.unwrap());
+    let (num, _) = parse(&tokens);
+
+    result += num;
   }
 
-  for _ in 0..6 {
-    let mut active_counts = HashMap::new();
-    for coordinate in universe.iter() {
-      increment_neighbors(&mut active_counts, *coordinate);
-    }
-
-    universe = active_counts.into_iter().filter(|(coordinate, num)| {
-      if universe.contains(coordinate) {
-        *num == 2 || *num == 3
-      } else {
-        *num == 3
-      }
-    }).map(|(coord, _)| coord)
-    .collect::<HashSet<Coordinate>>();
-  }
-
-  println!("{}", universe.len());
+  println!("result: {}", result);
 
   Ok(())
 }
 
-fn increment_neighbors(counts: &mut HashMap<Coordinate, u8>, coordinate: Coordinate) {
-  for coord in neighbors(coordinate) {
-    if let Some(num) = counts.get_mut(&coord) {
-      *num += 1;
-    } else {
-      counts.insert(coord, 1);
+fn parse<'a>(mut tokens: &'a [Token]) -> (u64, &'a [Token]) {
+  let mut result = 0;
+  let mut operation: Option<Token> = None;
+
+  while !tokens.is_empty() {
+    match tokens[0] {
+      Close => {
+        return (result, &tokens[1..])
+      },
+      Open => {
+        let (num, new_tokens) = parse(&tokens[1..]);
+        if let Some(op) = operation {
+          result = perform(result, &op, num);
+          operation = None;
+        } else {
+          result = num;
+        }
+        tokens = new_tokens;
+      },
+      Sum => {
+        operation = Some(Sum);
+        tokens = &tokens[1..];
+      },
+      Mul => {
+        operation = Some(Mul);
+        tokens = &tokens[1..];
+      },
+      Num(num) => {
+        if let Some(op) = operation {
+          result = perform(result, &op, num);
+          operation = None;
+        } else {
+          result = num;
+        }
+
+        tokens = &tokens[1..];
+      }
     }
+  }
+
+  (result, &[])
+}
+
+fn perform(left: u64, operation: &Token, right: u64) -> u64 {
+  match operation {
+    Sum => left + right,
+    Mul => left * right,
+    _ => panic!(),
   }
 }
 
-fn neighbors((x, y, z, w): Coordinate) -> impl std::iter::Iterator<Item=Coordinate> {
-  (w-1..=w+1).flat_map(move |nw| {
-    (z-1..=z+1).flat_map(move |nz| {
-      (y-1..=y+1).flat_map(move |ny| {
-        (x-1..=x+1).map(move |nx| (nx, ny, nz, nw))
-      })
-    })
-  }).filter(move |(nx, ny, nz, nw)| x != *nx || y != *ny || z != *nz || w != *nw)
+fn tokenize(string: &str) -> Vec<Token> {
+  let mut number_start: Option<usize> = None;
+  let mut tokens = Vec::new();
+
+  for (i, character) in string.char_indices() {
+    match character {
+      ' ' => if let Some(start) = number_start {
+        tokens.push(Num(string[start..i].parse().unwrap()));
+        number_start = None;
+      },
+      ')' => {
+        if let Some(start) = number_start {
+          tokens.push(Num(string[start..i].parse().unwrap()));
+          number_start = None;
+        }
+        tokens.push(Close);
+      },
+      '(' => tokens.push(Open),
+      '+' => tokens.push(Sum),
+      '*' => tokens.push(Mul),
+      _ => if number_start == None {
+        number_start = Some(i);
+      },
+    }
+  }
+
+  if let Some(num) = number_start {
+    tokens.push(Num(string[num..].parse().unwrap()));
+  }
+  
+  tokens
 }

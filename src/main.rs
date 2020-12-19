@@ -1,146 +1,96 @@
-use std::boxed::Box;
+use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
-
-#[derive(Debug, PartialEq)]
-enum Token {
-  Num(u64),
-  Sum,
-  Mul,
-  Open,
-  Close,
-}
-
-use Token::*;
+use regex::Regex;
 
 #[derive(Debug)]
-enum Expression {
-  Num(u64),
-  Sum(Box<Expression>, Box<Expression>),
-  Mul(Box<Expression>, Box<Expression>),
+enum Rule {
+  Literal(char),
+  Ref(u32),
+  Or(Vec<Rule>),
+  Seq(Vec<Rule>),
 }
+
+use Rule::*;
 
 fn main() -> io::Result<()> {
   let reader = BufReader::new(io::stdin());
- 
-  let mut result = 0;
-  for l in reader.lines() {
-    let tokens = tokenize(&l.unwrap());
-    let expression = parse(&tokens);
-    result += evaluate(expression);
+  let mut lines = reader.lines().into_iter();
+  let rule_line_regex = Regex::new(r"^(\d+): (.+)$").unwrap();
+  
+  let mut tokenized_rules = HashMap::new();
+  while let Some(l) = lines.next() {
+    let line = l.unwrap();
+    if line.is_empty() {
+      break;
+    }
+
+    let captures = rule_line_regex.captures(&line).unwrap();
+    let label = captures[1].parse::<u32>().unwrap();
+    let rule = &captures[2];
+
+    if rule.chars().nth(0).unwrap() == '"' {
+      tokenized_rules.insert(label, Literal(rule.chars().nth(1).unwrap()));
+    } else if rule.contains('|') {
+      tokenized_rules.insert(label, Or(rule.split('|').map(parse_seq).collect()));
+    } else {
+      tokenized_rules.insert(label, parse_seq(rule));
+    }
   }
 
-  println!("result: {}", result);
+  let mut count = 0;
+  for l in lines {
+    let line = l.unwrap();
+    let (mut result, more) = check_rule(&tokenized_rules, tokenized_rules.get(&0).unwrap(), &line);
+    result &= more.is_empty();
+
+    if result {
+      count += 1;
+    }
+  }
+
+  println!("{}", count);
 
   Ok(())
 }
 
-fn evaluate(expression: Expression) -> u64 {
-  match expression {
-    Expression::Num(num) => num,
-    Expression::Mul(l, r) => evaluate(*l) * evaluate(*r),
-    Expression::Sum(l, r) => evaluate(*l) + evaluate(*r),
-  }
+fn parse_seq(string: &str) -> Rule {
+  Rule::Seq(string.split(' ').filter(|s| !s.is_empty()).map(str::parse).map(Result::unwrap).map(Ref).collect::<Vec<Rule>>())
 }
 
-fn parse_num<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  match tokens[0] {
-    Num(num) => {
-      (Expression::Num(num), &tokens[1..])
+fn check_rule<'a>(tokenized_rules: &HashMap<u32, Rule>, rule: &Rule, string: &'a str) -> (bool, &'a str) {
+  match rule {
+    Literal(character) => {
+      let is_match = string.chars().nth(0).unwrap() == *character;
+      (is_match, &string[1..])
     },
-    _ => panic!("{:?}", tokens[0]),
-  }
-}
-
-fn parse_unit<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  match tokens[0] {
-    Num(_) => parse_num(tokens),
-    Open => parse_paren(tokens),
-    _ => panic!("{:?}", tokens[0]),
-  }
-}
-
-fn parse_paren<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  if tokens[0] != Open {
-    panic!("{:?}", tokens[0]);
-  }
-
-  let (expr, more_tokens) = parse_expression(&tokens[1..]);
-
-  if more_tokens[0] != Close {
-    panic!("{:?}", more_tokens[0]);
-  }
-
-  (expr, &more_tokens[1..])
-}
-
-fn parse_sum<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  let (mut left, mut more_tokens) = parse_unit(tokens);
-
-  while !more_tokens.is_empty() && more_tokens[0] == Sum {
-    let (right, t) = parse_unit(&more_tokens[1..]);
-    left = Expression::Sum(Box::new(left), Box::new(right));
-    more_tokens = t;
-  }
-
-  (left, more_tokens)
-}
-
-fn parse_mul<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  let (mut left, mut more_tokens) = parse_sum(tokens);
-
-  while !more_tokens.is_empty() && more_tokens[0] == Mul {
-    let (right, t) = parse_sum(&more_tokens[1..]);
-    left = Expression::Mul(Box::new(left), Box::new(right));
-    more_tokens = t;
-  }
-
-  (left, more_tokens)
-}
-
-fn parse_expression<'a>(tokens: &'a [Token]) -> (Expression, &'a [Token]) {
-  parse_mul(tokens)
-}
-
-fn parse<'a>(tokens: &'a [Token]) -> Expression {
-  let (expr, more_tokens) = parse_expression(tokens);
-  if !more_tokens.is_empty() {
-    panic!("{:?}", more_tokens);
-  }
-
-  expr
-}
-
-fn tokenize(string: &str) -> Vec<Token> {
-  let mut number_start: Option<usize> = None;
-  let mut tokens = Vec::new();
-
-  for (i, character) in string.char_indices() {
-    match character {
-      ' ' => if let Some(start) = number_start {
-        tokens.push(Num(string[start..i].parse().unwrap()));
-        number_start = None;
-      },
-      ')' => {
-        if let Some(start) = number_start {
-          tokens.push(Num(string[start..i].parse().unwrap()));
-          number_start = None;
+    Ref(label) => {
+      check_rule(tokenized_rules, tokenized_rules.get(label).unwrap(), string)
+    },
+    Seq(rules) => {
+      let mut is_match = true;
+      let mut more_str = string;
+      for rule in rules.iter() {
+        let (did_match, more) = check_rule(tokenized_rules, rule, more_str);
+        is_match &= did_match;
+        more_str = more;
+        if !is_match {
+          break;
         }
-        tokens.push(Close);
-      },
-      '(' => tokens.push(Open),
-      '+' => tokens.push(Sum),
-      '*' => tokens.push(Mul),
-      _ => if number_start == None {
-        number_start = Some(i);
-      },
+      }
+
+      (is_match, more_str)
+    },
+    Or(rules) => {
+      for rule in rules.iter() {
+        let (did_match, more) = check_rule(tokenized_rules, rule, string);
+        if did_match {
+          return (true, more);
+        }
+      }
+
+      (false, string)
     }
   }
-
-  if let Some(num) = number_start {
-    tokens.push(Num(string[num..].parse().unwrap()));
-  }
-  
-  tokens
 }

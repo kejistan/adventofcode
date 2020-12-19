@@ -39,11 +39,14 @@ fn main() -> io::Result<()> {
     }
   }
 
+  tokenized_rules.remove(&0);
+  tokenized_rules.remove(&8);
+  tokenized_rules.remove(&11);
+
   let mut count = 0;
   for l in lines {
     let line = l.unwrap();
-    let (mut result, more) = check_rule(&tokenized_rules, tokenized_rules.get(&0).unwrap(), &line);
-    result &= more.is_empty();
+    let result = check_rules(&tokenized_rules, &line);
 
     if result {
       count += 1;
@@ -55,11 +58,68 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
+fn check_rules(tokenized_rules: &HashMap<u32, Rule>, mut string: &str) -> bool {
+  // rule 0: 8 11
+  // rule 8: 42 | 42 8
+  // rule 11: 42 31 | 42 11 31
+
+  let rule42 = tokenized_rules.get(&42).unwrap();
+  while !string.is_empty() {
+    if let (true, more) = check_rule(tokenized_rules, rule42, string) {
+      string = more;
+      if check_rule_11(tokenized_rules, string) {
+        return true;
+      }
+    } else {
+      break;
+    }
+  }
+
+  false
+}
+
+fn check_rule_11(tokenized_rules: &HashMap<u32, Rule>, mut string: &str) -> bool {
+  let rule42 = tokenized_rules.get(&42).unwrap();
+  let rule31 = tokenized_rules.get(&31).unwrap();
+
+  let mut num = 0;
+  while !string.is_empty() {
+    if let (true, more) = check_rule(tokenized_rules, rule42, string) {
+      num += 1;
+      string = more;
+
+      let mut cont = string;
+      let mut i = 0;
+      while i < num && !cont.is_empty() {
+        if let (true, more) = check_rule(tokenized_rules, rule31, cont) {
+          cont = more;
+        } else {
+          break;
+        }
+
+        i += 1;
+      }
+
+      if i == num && cont.is_empty() {
+        return true;
+      }
+    } else {
+      break;
+    }
+  }
+
+  false
+}
+
 fn parse_seq(string: &str) -> Rule {
   Rule::Seq(string.split(' ').filter(|s| !s.is_empty()).map(str::parse).map(Result::unwrap).map(Ref).collect::<Vec<Rule>>())
 }
 
 fn check_rule<'a>(tokenized_rules: &HashMap<u32, Rule>, rule: &Rule, string: &'a str) -> (bool, &'a str) {
+  if string.is_empty() {
+    return (false, string);
+  }
+
   match rule {
     Literal(character) => {
       let is_match = string.chars().nth(0).unwrap() == *character;

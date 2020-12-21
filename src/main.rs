@@ -25,17 +25,9 @@ fn main() -> io::Result<()> {
     }
   });
 
-  let mut ingredient_counts: HashMap<String, u32> = HashMap::new();
   let mut allergen_possibilities: HashMap<String, HashSet<String>> = HashMap::new();
   for food in foods {
     let possibilities = food.ingredients.iter().map(String::clone).collect::<HashSet<String>>();
-    for ingredient in food.ingredients.iter() {
-      if let Some(count) = ingredient_counts.get_mut(ingredient) {
-        *count += 1;
-      } else {
-        ingredient_counts.insert(ingredient.clone(), 1);
-      }
-    }
     for allergen in food.allergens {
       if let Some(set) = allergen_possibilities.get_mut(allergen.as_str()) {
         *set = set.intersection(&possibilities).map(|s| s.clone()).collect::<HashSet<String>>();
@@ -45,12 +37,21 @@ fn main() -> io::Result<()> {
     }
   }
 
-  let possibilities = allergen_possibilities.values().fold(HashSet::default(), |result, possibilities| {
-    possibilities.union(&result).map(String::clone).collect::<HashSet<String>>()
-  });
+  let mut known_allergens = Vec::with_capacity(allergen_possibilities.len());
+  while !allergen_possibilities.is_empty() {
+    let (a, _) = allergen_possibilities.iter().find(|(_, set)| set.len() == 1).unwrap();
+    let allergen = a.clone();
+    let (allergen, set) = allergen_possibilities.remove_entry(&allergen).unwrap();
+    let ingredient = set.into_iter().next().unwrap();
+    for (_, set) in allergen_possibilities.iter_mut() {
+      set.remove(&ingredient);
+    }
+    known_allergens.push((allergen, ingredient));
+  }
 
-  let count: u32 = ingredient_counts.keys().map(String::clone).collect::<HashSet<String>>().difference(&possibilities).map(|key| ingredient_counts.get(key).unwrap()).sum();
-  println!("{}", count);
+  known_allergens.sort_by(|(a, _), (b, _)| a.cmp(b));
+  let sorted_ingredients = known_allergens.into_iter().map(|(_, ingredient)| ingredient).collect::<Vec<String>>();
+  println!("{}", sorted_ingredients.join(","));
 
   Ok(())
 }

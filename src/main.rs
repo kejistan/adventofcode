@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
 use std::io::prelude::*;
@@ -45,9 +46,47 @@ fn main() -> io::Result<()> {
     }
   }
 
+  for _ in 0..100 {
+    black_coords = update_tiles(black_coords);
+  }
+
   println!("{}", black_coords.len());
 
   Ok(())
+}
+
+fn update_tiles(black_coords: HashSet<(i32, i32)>) -> HashSet<(i32, i32)> {
+  let mut neighbor_counts = HashMap::new();
+  for (x, y) in black_coords.iter() {
+    increment_neighbor(&mut neighbor_counts, (x + 1, *y));
+    increment_neighbor(&mut neighbor_counts, (x + 1, y - 1));
+    increment_neighbor(&mut neighbor_counts, (*x, y - 1));
+    increment_neighbor(&mut neighbor_counts, (x - 1, *y));
+    increment_neighbor(&mut neighbor_counts, (x - 1, y + 1));
+    increment_neighbor(&mut neighbor_counts, (*x, y + 1));
+  }
+
+  let mut new_black_coords = HashSet::new();
+  for coord in black_coords {
+    if let Some(count) = neighbor_counts.remove(&coord) {
+      if count <= 2 {
+        new_black_coords.insert(coord);
+      }
+    }
+  }
+  for (coord, _) in neighbor_counts.into_iter().filter(|(_, count)| *count == 2) {
+    new_black_coords.insert(coord);
+  }
+
+  new_black_coords
+}
+
+fn increment_neighbor(counts: &mut HashMap<(i32, i32), u32>, coord: (i32, i32)) {
+  if let Some(count) = counts.get_mut(&coord) {
+    *count += 1;
+  } else {
+    counts.insert(coord, 1);
+  }
 }
 
 fn traverse(instruction: Vec<Direction>) -> (i32, i32) {

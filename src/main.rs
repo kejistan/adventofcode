@@ -1,56 +1,88 @@
-use std::collections::VecDeque;
+use std::collections::HashSet;
 use std::io;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::fmt;
+use regex::Regex;
+
+#[derive(Debug)]
+enum Direction {
+  East,
+  SouthEast,
+  SouthWest,
+  West,
+  NorthWest,
+  NorthEast,
+}
+
+use Direction::*;
 
 fn main() -> io::Result<()> {
-  let input = vec![6,2,4,3,9,7,1,5,8];
-  let max = input.len() as u8;
-  let mut circle = input.into_iter().collect::<VecDeque<u8>>();
-  for _ in 0..100 {
-    let current = *circle.front().unwrap();
-    circle.rotate_left(1);
+  let input = BufReader::new(io::stdin());
+  let instruction_regex = Regex::new(r"(e|se|sw|w|nw|ne)").unwrap();
 
-    let mut cups = Vec::with_capacity(3);
-    cups.push(circle.pop_front().unwrap());
-    cups.push(circle.pop_front().unwrap());
-    cups.push(circle.pop_front().unwrap());
+  let instructions = input.lines().map(|l| {
+    let line = l.unwrap();
+    instruction_regex.captures_iter(&line).map(|cap| {
+      match &cap[1] {
+        "e" => East,
+        "se" => SouthEast,
+        "sw" => SouthWest,
+        "w" => West,
+        "nw" => NorthWest,
+        "ne" => NorthEast,
+        other => panic!("{}", other),
+      }
+    }).collect::<Vec<Direction>>()
+  });
 
-    let next = next(current, &cups, max);
-
-    while *circle.back().unwrap() != next {
-      circle.rotate_right(1);
-    }
-
-    for cup in cups.into_iter() {
-      circle.push_back(cup);
-    }
-
-    while *circle.back().unwrap() != current {
-      circle.rotate_left(1);
+  let mut black_coords = HashSet::new();
+  for coord in instructions.map(traverse) {
+    if black_coords.contains(&coord) {
+      black_coords.remove(&coord);
+    } else {
+      black_coords.insert(coord);
     }
   }
 
-  while *circle.back().unwrap() != 1 {
-    circle.rotate_left(1);
-  }
-
-  let result = circle.into_iter().take(max as usize - 1).map(|cup| format!("{}", cup)).collect::<String>();
-  println!("{}", result);
+  println!("{}", black_coords.len());
 
   Ok(())
 }
 
-fn next(mut current: u8, cups: &[u8], max: u8) -> u8 {
-  loop {
-    if current == 1 {
-      current = max;
-    } else {
-      current -= 1;
-    }
-
-    if !cups.contains(&current) {
-      break;
+fn traverse(instruction: Vec<Direction>) -> (i32, i32) {
+  let mut x = 0;
+  let mut y = 0;
+  for i in instruction {
+    match i {
+      East => x += 1,
+      SouthEast => {
+        x += 1;
+        y -= 1;
+      },
+      SouthWest => y -= 1,
+      West => x -= 1,
+      NorthWest => {
+        x -= 1;
+        y += 1;
+      },
+      NorthEast => y += 1,
     }
   }
 
-  current
+  (x, y)
+}
+
+impl fmt::Display for Direction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let string = match self {
+      East => "e",
+      SouthEast => "se",
+      SouthWest => "sw",
+      West => "w",
+      NorthWest => "nw",
+      NorthEast => "ne",
+    };
+    write!(f, "{}", string)
+  }
 }

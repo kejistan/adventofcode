@@ -26,13 +26,16 @@ fn main() -> io::Result<()> {
     }
   });
 
-  let mut pos = (0, 0);
+  let mut pos: (u32, u32, i32) = (0, 0, 0);
 
   for command in commands {
     match command {
-      Command::Forward(count) => pos.0 += count,
-      Command::Down(count) => pos.1 += count,
-      Command::Up(count) => pos.1 -= count,
+      Command::Forward(count) => {
+        pos.0 += count;
+        pos.1 += (count as i32 * pos.2) as u32;
+      },
+      Command::Down(count) => pos.2 += count as i32,
+      Command::Up(count) => pos.2 -= count as i32,
     }
   }
 

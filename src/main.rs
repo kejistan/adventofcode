@@ -33,9 +33,37 @@ fn main() -> io::Result<()> {
 
   println!("{:0width$b}", gamma, width = width);
   println!("{:0width$b}", epsilon, width = width);
-  println!("{}", gamma * epsilon);
+
+  let oxygen = find_rating(numbers.clone(), width, Type::Gamma);
+  let co2 = find_rating(numbers.clone(), width, Type::Epsilon);
+  println!("oxygen {}", oxygen);
+  println!("co2 {}", co2);
+  println!("{}", oxygen * co2);
 
   Ok(())
+}
+
+enum Type {
+  Gamma,
+  Epsilon,
+}
+
+fn find_rating(mut numbers: Vec<u32>, width: usize, rate_type: Type) -> u32 {
+  let mut bit = 1;
+  while width >= bit && numbers.len() > 1 {
+    let (gamma, epsilon) = find_rates(&numbers, width);
+    let rate = match rate_type {
+      Type::Gamma => gamma,
+      Type::Epsilon => epsilon,
+    };
+
+    let mask = 1 << width - bit;
+    numbers = numbers.into_iter().filter(|num| num & mask == rate & mask).collect::<Vec<u32>>();
+
+    bit += 1;
+  }
+
+  numbers[0]
 }
 
 fn find_rates(numbers: &Vec<u32>, width: usize) -> (u32, u32) {

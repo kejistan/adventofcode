@@ -1,46 +1,73 @@
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
-use regex::Regex;
-
-enum Command {
-  Forward(u32),
-  Up(u32),
-  Down(u32),
-}
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
-  let re = Regex::new(r"^(?P<direction>[[:alpha:]]+) (?P<count>\d+)$").unwrap();
 
-  let commands = input.lines().map(|l| {
+  let mut width = 0;
+  let mut numbers = vec![];
+
+  for l in input.lines() {
+    let mut number = 0;
     let line = l.unwrap();
-    let cap = re.captures(&line).unwrap();
-    let count = cap.name("count").unwrap().as_str().parse::<u32>().unwrap();
-
-    match cap.name("direction").unwrap().as_str() {
-      "forward" => Command::Forward(count),
-      "up" => Command::Up(count),
-      "down" => Command::Down(count),
-      _ => panic!(),
+    if width == 0 {
+      width = line.len();
     }
-  });
 
-  let mut pos: (u32, u32, i32) = (0, 0, 0);
+    for bit in line.chars() {
+      number <<= 1;
 
-  for command in commands {
-    match command {
-      Command::Forward(count) => {
-        pos.0 += count;
-        pos.1 += (count as i32 * pos.2) as u32;
-      },
-      Command::Down(count) => pos.2 += count as i32,
-      Command::Up(count) => pos.2 -= count as i32,
+      match bit {
+        '1' => {
+          number += 1;
+        }
+        _ => {}
+      }
+    }
+
+    numbers.push(number);
+  }
+
+  let (gamma, epsilon) = find_rates(&numbers, width);
+
+  println!("{:0width$b}", gamma, width = width);
+  println!("{:0width$b}", epsilon, width = width);
+  println!("{}", gamma * epsilon);
+
+  Ok(())
+}
+
+fn find_rates(numbers: &Vec<u32>, width: usize) -> (u32, u32) {
+  let mut one_bits = vec![];
+  for num in numbers {
+    for i in 0..width {
+      if one_bits.len() == i {
+        one_bits.push(0);
+      }
+
+      let mask = 1 << i;
+      if num & mask != 0 {
+        one_bits[i] += 1;
+      }
     }
   }
 
-  println!("{:?}", pos);
-  println!("{}", pos.0 * pos.1);
+  let mut gamma = 0;
+  let mut epsilon = 0;
 
-  Ok(())
+  one_bits.reverse();
+
+  for count in one_bits {
+    gamma <<= 1;
+    epsilon <<= 1;
+
+    if 2 * count >= numbers.len() {
+      gamma += 1;
+    } else {
+      epsilon += 1;
+    }
+  }
+  
+  (gamma, epsilon)
 }

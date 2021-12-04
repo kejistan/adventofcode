@@ -22,9 +22,14 @@ fn main() -> io::Result<()> {
 
   let mut score = 0;
   for number in numbers {
-    if let Some(winner) = mark(&mut boards, number) {
-      score = number * score_board(winner);
+    let is_final_board = boards.len() == 1;
+    mark(&mut boards, number);
+
+    if is_final_board && check_board(&boards[0]) {
+      score = number * score_board(&boards[0]);
       break;
+    } else {
+      boards = boards.into_iter().filter(|board| !check_board(board)).collect();
     }
   }
 
@@ -33,18 +38,13 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
-fn mark(boards: &mut Vec<Vec<Vec<(u32, bool)>>>, number: u32) -> Option<&Vec<Vec<(u32, bool)>>> {
+fn mark(boards: &mut Vec<Vec<Vec<(u32, bool)>>>, number: u32) {
   for board in boards {
-    let board = mark_board(board, number);
-    if board.is_some() {
-      return board;
-    }
+    mark_board(board, number);
   }
-
-  None
 }
 
-fn mark_board(board: &mut Vec<Vec<(u32, bool)>>, number: u32) -> Option<&Vec<Vec<(u32, bool)>>> {
+fn mark_board(board: &mut Vec<Vec<(u32, bool)>>, number: u32) {
   'mark_loop: for row in board.iter_mut() {
     for (num, marked) in row.iter_mut() {
       if *num == number {
@@ -53,12 +53,6 @@ fn mark_board(board: &mut Vec<Vec<(u32, bool)>>, number: u32) -> Option<&Vec<Vec
       }
     }
   }
-
-  if check_board(board) {
-    return Some(&*board);
-  }
-
-  None
 }
 
 fn check_board(board: &Vec<Vec<(u32, bool)>>) -> bool {

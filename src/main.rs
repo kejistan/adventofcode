@@ -4,6 +4,7 @@ use std::io::BufRead;
 use std::collections::HashMap;
 use std::cmp::max;
 use std::cmp::min;
+use std::mem::swap;
 use regex::Regex;
 use core::iter::Iterator;
 
@@ -22,8 +23,6 @@ fn main() -> io::Result<()> {
     let y2 = cap["y2"].parse::<u32>().unwrap();
 
     ((x1, y1), (x2, y2))
-  }).filter(|(start, end)| {
-    start.0 == end.0 || start.1 == end.1
   });
 
   for line in iter {
@@ -37,7 +36,7 @@ fn main() -> io::Result<()> {
   Ok(())
 }
 
-fn draw_line(map: &mut HashMap<(u32, u32), u32>, (start, end): ((u32, u32), (u32, u32))) {
+fn draw_line(map: &mut HashMap<(u32, u32), u32>, (mut start, mut end): ((u32, u32), (u32, u32))) {
   if start.0 == end.0 {
     for y in min(start.1, end.1)..=max(start.1, end.1) {
       let count = map.entry((start.0, y)).or_insert(0);
@@ -49,6 +48,22 @@ fn draw_line(map: &mut HashMap<(u32, u32), u32>, (start, end): ((u32, u32), (u32
       *count += 1;
     }
   } else {
-    panic!();
+    if start.0 > end.0 {
+      swap(&mut start, &mut end);
+    }
+
+    let slope: i32 = if start.1 > end.1 {
+      -1
+    } else {
+      1
+    };
+
+    for i in 0..=(end.0 - start.0) {
+      let x = i + start.0;
+      let y = (i as i32 * slope + start.1 as i32) as u32;
+
+      let count = map.entry((x, y)).or_insert(0);
+      *count += 1;
+    }
   }
 }

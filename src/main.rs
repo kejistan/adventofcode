@@ -16,7 +16,7 @@ fn main() -> io::Result<()> {
     fish_counts[age] += 1;
   }
 
-  for _ in 0..80 {
+  for _ in 0..256 {
     advance(&mut fish_counts);
   }
 

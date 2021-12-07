@@ -26,5 +26,9 @@ fn main() -> io::Result<()> {
 }
 
 fn total_fuel_cost(positions: &Vec<u32>, target: u32) -> u32 {
-  positions.iter().fold(0, |cost, pos| cost + (*pos as i32 - target as i32).abs() as u32)
+  positions.iter().fold(0, |total_cost, pos| {
+    let distance = (*pos as i32 - target as i32).abs() as u32;
+    let individual_cost = distance * (distance + 1) / 2;
+    total_cost + individual_cost
+  })
 }

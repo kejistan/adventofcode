@@ -1,34 +1,19 @@
 use std::io;
 use std::io::BufReader;
-use std::io::BufRead;
-use regex::Regex;
+
+mod grouped_iterator;
+use grouped_iterator::GroupedIterator;
 
 fn main() -> io::Result<()> {
-  let re = Regex::new(r"\d+").unwrap();
   let input = BufReader::new(io::stdin());
 
-  let positions = re.captures_iter(&input.lines().next().unwrap().unwrap()).map(|caps| caps.get(0).unwrap().as_str().parse::<u32>().unwrap()).collect::<Vec<u32>>();
-  let max = positions.iter().max().unwrap();
+  let max = input.groups().map(|lines| -> u32 {
+    lines.unwrap().lines().map(|line| -> u32 {
+      line.parse::<u32>().unwrap()
+    }).sum()
+  }).max();
 
-  let mut min = None;
-  for i in 0..*max {
-    let cost = total_fuel_cost(&positions, i);
-    match min {
-      None => min = Some(cost),
-      Some(best_so_far) if best_so_far > cost => min = Some(cost),
-      _ => {},
-    }
-  }
-
-  println!("{}", min.unwrap());
+  println!("{}", max.unwrap_or(0));
 
   Ok(())
-}
-
-fn total_fuel_cost(positions: &Vec<u32>, target: u32) -> u32 {
-  positions.iter().fold(0, |total_cost, pos| {
-    let distance = (*pos as i32 - target as i32).abs() as u32;
-    let individual_cost = distance * (distance + 1) / 2;
-    total_cost + individual_cost
-  })
 }

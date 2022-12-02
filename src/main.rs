@@ -9,9 +9,15 @@ enum Shape {
   Scissors,
 }
 
+enum Outcome {
+  Win,
+  Draw,
+  Lose,
+}
+
 struct Round {
   opponent: Shape,
-  me: Shape,
+  outcome: Outcome,
 }
 
 fn main() -> io::Result<()> {
@@ -19,19 +25,21 @@ fn main() -> io::Result<()> {
 
   let rounds = input.lines().map(|line| {
     let line_string = line.unwrap();
-    let mut round_shapes = line_string.split_ascii_whitespace().take(2).map(|str| match str {
-      "A" => Shape::Rock,
-      "B" => Shape::Paper,
-      "C" => Shape::Scissors,
-      "X" => Shape::Rock,
-      "Y" => Shape::Paper,
-      "Z" => Shape::Scissors,
-      _ => panic!(),
-    });
-
+    let mut letters = line_string.split_ascii_whitespace().take(2);
+  
     Round {
-      opponent: round_shapes.next().unwrap(),
-      me: round_shapes.next().unwrap(),
+      opponent: match letters.next().unwrap() {
+        "A" => Shape::Rock,
+        "B" => Shape::Paper,
+        "C" => Shape::Scissors,
+        _ => panic!(),
+      },
+      outcome: match letters.next().unwrap() {
+        "X" => Outcome::Lose,
+        "Y" => Outcome::Draw,
+        "Z" => Outcome::Win,
+        _ => panic!(),
+      },
     }
   });
 
@@ -44,14 +52,18 @@ fn main() -> io::Result<()> {
 
 impl Round {
   fn score(&self) -> u32 {
-    let outcome = match self.me {
-      x if x == self.opponent => 3,
-      Shape::Rock if self.opponent == Shape::Paper => 0,
-      Shape::Paper if self.opponent == Shape::Scissors => 0,
-      Shape::Scissors if self.opponent == Shape::Rock => 0,
-      _ => 6,
-    };
-
-    outcome + (self.me as u32)
+    match self.outcome {
+      Outcome::Draw => 3 + self.opponent as u32,
+      Outcome::Lose => match self.opponent {
+        Shape::Rock => Shape::Scissors as u32,
+        Shape::Paper => Shape::Rock as u32,
+        Shape::Scissors => Shape::Paper as u32,
+      }
+      Outcome::Win => 6 + match self.opponent {
+        Shape::Rock => Shape::Paper as u32,
+        Shape::Paper => Shape::Scissors as u32,
+        Shape::Scissors => Shape::Rock as u32,
+      }
+    }
   }
 }

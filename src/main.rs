@@ -5,24 +5,33 @@ use std::io::{BufReader, BufRead};
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
 
-  let score: u32 = input.lines().map(|line| {
+  let contents = input.lines().map(|line| {
     let line_string = line.unwrap();
-    let line_bytes = line_string.as_bytes();
-    let line_len = line_bytes.len();
+    line_string.bytes().map(byte_to_priority).collect::<HashSet<u8>>()
+  });
 
-    let first_compartment = line_bytes[0..line_len / 2].iter().map(byte_to_priority).collect::<HashSet<u8>>();
-    let second_compartment = line_bytes[line_len / 2..line_len].iter().map(byte_to_priority).collect::<HashSet<u8>>();
+  let mut count = 1;
+  let mut contents_iter = contents.into_iter();
+  let mut shared_items = contents_iter.next().unwrap();
+  let mut score = 0;
+  for content in contents_iter {
+    if count == 0 {
+      score += shared_items.into_iter().next().unwrap() as u32;
+      shared_items = content;
+    } else {
+      shared_items = shared_items.intersection(&content).map(|&a| a).collect();
+    }
 
-    let overlap = first_compartment.intersection(&second_compartment);
-    *overlap.into_iter().next().unwrap() as u32
-  }).sum();
+    count = (count + 1) % 3;
+  }
+  score += shared_items.into_iter().next().unwrap() as u32;
 
   println!("{}", score);
 
   Ok(())
 }
 
-fn byte_to_priority(&byte: &u8) -> u8 {
+fn byte_to_priority(byte: u8) -> u8 {
   if byte >= 'a' as u8 {
     byte - 'a' as u8 + 1
   } else {

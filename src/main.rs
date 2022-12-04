@@ -23,7 +23,7 @@ fn main() -> io::Result<()> {
       end: captures.get(4).unwrap().as_str().parse::<u8>().unwrap(),
     };
 
-    if one.fully_contains(&two) || two.fully_contains(&one) {
+    if one.overlaps(&two) {
       1
     } else {
       0
@@ -36,7 +36,7 @@ fn main() -> io::Result<()> {
 }
 
 impl Range {
-  fn fully_contains(&self, other: &Range) -> bool {
-    return other.start >= self.start && other.end <= self.end;
+  fn overlaps(&self, other: &Range) -> bool {
+    !(other.end < self.start || other.start > self.end)
   }
 }

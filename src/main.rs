@@ -1,40 +1,42 @@
-use std::collections::HashSet;
 use std::{io};
 use std::io::{BufReader, BufRead};
+use regex::{Regex};
+
+struct Range {
+  start: u8,
+  end: u8,
+}
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
+  let r = Regex::new(r"(\d+)-(\d+),(\d+)-(\d+)").unwrap();
 
-  let contents = input.lines().map(|line| {
-    let line_string = line.unwrap();
-    line_string.bytes().map(byte_to_priority).collect::<HashSet<u8>>()
-  });
+  let count: u32 = input.lines().map(|line| {
+    let string = line.unwrap();
+    let captures = r.captures(&string).unwrap();
+    let one = Range {
+      start: captures.get(1).unwrap().as_str().parse::<u8>().unwrap(),
+      end: captures.get(2).unwrap().as_str().parse::<u8>().unwrap(),
+    };
+    let two = Range {
+      start: captures.get(3).unwrap().as_str().parse::<u8>().unwrap(),
+      end: captures.get(4).unwrap().as_str().parse::<u8>().unwrap(),
+    };
 
-  let mut count = 1;
-  let mut contents_iter = contents.into_iter();
-  let mut shared_items = contents_iter.next().unwrap();
-  let mut score = 0;
-  for content in contents_iter {
-    if count == 0 {
-      score += shared_items.into_iter().next().unwrap() as u32;
-      shared_items = content;
+    if one.fully_contains(&two) || two.fully_contains(&one) {
+      1
     } else {
-      shared_items = shared_items.intersection(&content).map(|&a| a).collect();
+      0
     }
+  }).sum();
 
-    count = (count + 1) % 3;
-  }
-  score += shared_items.into_iter().next().unwrap() as u32;
-
-  println!("{}", score);
+  println!("{}", count);
 
   Ok(())
 }
 
-fn byte_to_priority(byte: u8) -> u8 {
-  if byte >= 'a' as u8 {
-    byte - 'a' as u8 + 1
-  } else {
-    byte - 'A' as u8 + 27
+impl Range {
+  fn fully_contains(&self, other: &Range) -> bool {
+    return other.start >= self.start && other.end <= self.end;
   }
 }

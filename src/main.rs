@@ -47,8 +47,14 @@ fn main() -> io::Result<()> {
   });
 
   for Move {num, from, to} in moves {
+    let mut in_motion = Vec::with_capacity(num);
     for _ in 0..num {
-      let container = stacks[from].pop_back().unwrap();
+      in_motion.push(stacks[from].pop_back().unwrap());
+    }
+
+    in_motion.reverse();
+
+    for container in in_motion {
       stacks[to].push_back(container);
     }
   }

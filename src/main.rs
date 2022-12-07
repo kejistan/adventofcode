@@ -58,14 +58,14 @@ fn main() -> io::Result<()> {
     }
   }
 
-  let mut result = 0;
-  for DirectoryInfo {size, has_listed: _ } in directories.values() {
-    if *size <= 100_000 {
-      result += size;
-    }
-  }
+  let free_space = 70_000_000 - directories.get("").unwrap().size;
+  let space_required = 30_000_000 - free_space;
 
-  println!("{}", result);
+  let result = directories.values().filter(|info| {
+    info.size >= space_required
+  }).map(|info| info.size).min();
+
+  println!("{}", result.unwrap());
 
   Ok(())
 }

@@ -33,8 +33,9 @@ fn main() -> io::Result<()> {
   });
 
   let mut tail_positions: HashSet<Coordinate> = HashSet::new();
-  let mut tail = Coordinate::new(0, 0);
-  let mut head = Coordinate::new(0, 0);
+  let mut knots = [Coordinate::new(0, 0); 10];
+
+  tail_positions.insert(knots[9]);
 
   for motion in motions {
     let (delta, count) = match motion {
@@ -45,9 +46,13 @@ fn main() -> io::Result<()> {
     };
 
     for _ in 0..count {
-      head += delta;
-      update_tail(&head, &mut tail);
-      tail_positions.insert(tail);
+      knots[0] += delta;
+
+      for i in 1..knots.len() {
+        let (head, tail) = knots.split_at_mut(i);
+        update_knot(&head[i - 1], &mut tail[0]);
+      }
+      tail_positions.insert(knots[9]);
     }
   }
 
@@ -86,7 +91,7 @@ impl Sub for Coordinate {
   }
 }
 
-fn update_tail(head: &Coordinate, tail: &mut Coordinate) {
+fn update_knot(head: &Coordinate, tail: &mut Coordinate) {
   let delta = head - tail;
   let mut correction = Coordinate::new(0, 0);
   if delta.x.abs() > 1 || delta.y.abs() > 1 {

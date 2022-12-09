@@ -1,19 +1,16 @@
+mod coordinate;
+
 use std::collections::HashSet;
-use std::ops::{AddAssign, Sub};
 use std::{io};
 use std::io::{BufReader, BufRead};
+
+use crate::coordinate::Coordinate;
 
 enum Motion {
   Right(u8),
   Left(u8),
   Up(u8),
   Down(u8),
-}
-
-#[derive(Clone, Copy, PartialEq, Hash, Eq)]
-struct Coordinate {
-  x: i32,
-  y: i32,
 }
 
 fn main() -> io::Result<()> {
@@ -60,35 +57,6 @@ fn main() -> io::Result<()> {
   println!("{}", result);
 
   Ok(())
-}
-
-impl AddAssign for Coordinate {
-  fn add_assign(&mut self, other: Self) {
-    self.x += other.x;
-    self.y += other.y;
-  }
-}
-
-impl Coordinate {
-  fn new(x: i32, y: i32) -> Coordinate {
-    Coordinate { x, y }
-  }
-}
-
-impl Sub for &Coordinate {
-  type Output = Coordinate;
-
-  fn sub(self, other: Self) -> Coordinate {
-    Coordinate::new(self.x - other.x, self.y - other.y)
-  }
-}
-
-impl Sub for Coordinate {
-  type Output = Self;
-
-  fn sub(self, other: Self) -> Coordinate {
-    Coordinate::new(self.x - other.x, self.y - other.y)
-  }
 }
 
 fn update_knot(head: &Coordinate, tail: &mut Coordinate) {

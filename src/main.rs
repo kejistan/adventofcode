@@ -1,70 +1,106 @@
-use std::cmp::max;
+use std::collections::HashSet;
+use std::ops::{AddAssign, Sub};
 use std::{io};
 use std::io::{BufReader, BufRead};
+
+enum Motion {
+  Right(u8),
+  Left(u8),
+  Up(u8),
+  Down(u8),
+}
+
+#[derive(Clone, Copy, PartialEq, Hash, Eq)]
+struct Coordinate {
+  x: i32,
+  y: i32,
+}
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
 
-  let trees = input.lines().map(|result| {
+  let motions = input.lines().map(|result| {
     let line = result.unwrap();
-    line.bytes().map(|byte| {
-      byte - '0' as u8
-    }).collect::<Vec<u8>>()
-  }).collect::<Vec<Vec<u8>>>();
+    let (command, number) = line.split_at(2);
+    let count = number.parse::<u8>().unwrap();
+    match command {
+      "L " => Motion::Left(count),
+      "R " => Motion::Right(count),
+      "U " => Motion::Up(count),
+      "D " => Motion::Down(count),
+      _ => unreachable!(),
+    }
+  });
 
-  let mut max_score: u32 = 0;
+  let mut tail_positions: HashSet<Coordinate> = HashSet::new();
+  let mut tail = Coordinate::new(0, 0);
+  let mut head = Coordinate::new(0, 0);
 
-  for y in 0..trees.len() {
-    let row = &trees[y];
-    for x in 0..row.len() {
-      let height = row[x];
+  for motion in motions {
+    let (delta, count) = match motion {
+      Motion::Down(count) => (Coordinate::new(0, -1), count),
+      Motion::Up(count) => (Coordinate::new(0, 1), count),
+      Motion::Left(count) => (Coordinate::new(-1, 0), count),
+      Motion::Right(count) => (Coordinate::new(1, 0), count),
+    };
 
-      let mut w_distance = 0;
-      let mut sight_x = x;
-      while sight_x > 0 {
-        sight_x -= 1;
-        w_distance += 1;
-        if row[sight_x] >= height {
-          break;
-        }
-      }
-
-      let mut e_distance = 0;
-      sight_x = x;
-      while sight_x < row.len() - 1 {
-        sight_x += 1;
-        e_distance += 1;
-        if row[sight_x] >= height {
-          break;
-        }
-      }
-
-      let mut n_distance = 0;
-      let mut sight_y = y;
-      while sight_y > 0 {
-        sight_y -= 1;
-        n_distance += 1;
-        if trees[sight_y][x] >= height {
-          break;
-        }
-      }
-
-      let mut s_distance = 0;
-      sight_y = y;
-      while sight_y < trees.len() - 1 {
-        sight_y += 1;
-        s_distance += 1;
-        if trees[sight_y][x] >= height {
-          break;
-        }
-      }
-
-      let score = w_distance * e_distance * n_distance * s_distance;
-      max_score = max(score, max_score);
+    for _ in 0..count {
+      head += delta;
+      update_tail(&head, &mut tail);
+      tail_positions.insert(tail);
     }
   }
 
-  println!("{}", max_score);
+  let result = tail_positions.len();
+  println!("{}", result);
 
   Ok(())
+}
+
+impl AddAssign for Coordinate {
+  fn add_assign(&mut self, other: Self) {
+    self.x += other.x;
+    self.y += other.y;
+  }
+}
+
+impl Coordinate {
+  fn new(x: i32, y: i32) -> Coordinate {
+    Coordinate { x, y }
+  }
+}
+
+impl Sub for &Coordinate {
+  type Output = Coordinate;
+
+  fn sub(self, other: Self) -> Coordinate {
+    Coordinate::new(self.x - other.x, self.y - other.y)
+  }
+}
+
+impl Sub for Coordinate {
+  type Output = Self;
+
+  fn sub(self, other: Self) -> Coordinate {
+    Coordinate::new(self.x - other.x, self.y - other.y)
+  }
+}
+
+fn update_tail(head: &Coordinate, tail: &mut Coordinate) {
+  let delta = head - tail;
+  let mut correction = Coordinate::new(0, 0);
+  if delta.x.abs() > 1 || delta.y.abs() > 1 {
+    if delta.x > 0 {
+      correction.x = 1;
+    } else if delta.x < 0 {
+      correction.x = -1;
+    }
+    if delta.y > 0 {
+      correction.y = 1;
+    } else if delta.y < 0 {
+      correction.y = -1;
+    }
+  }
+
+  *tail += correction;
 }

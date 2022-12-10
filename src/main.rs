@@ -32,10 +32,18 @@ fn main() -> io::Result<()> {
     }
   }).enumerate().map(|(cycle, x)| (cycle + 2, x));
 
-  let result: i64 = cycles
-    .filter(|(cycle, _)| *cycle == 20 || (*cycle > 20 && (cycle - 20) % 40 == 0))
-    .map(|(cycle, x)| -> i64 { cycle as i64 * x as i64 }).sum();
-  println!("{}", result);
+  print!("#");
+  for (cycle, x) in cycles {
+    let pixel: i64 = (cycle as i64 - 1) % 40;
+    if pixel == 0 {
+      print!("\n");
+    }
+    if pixel >= x - 1 && pixel <= x + 1  {
+      print!("#");
+    } else {
+      print!(".");
+    }
+  }
 
   Ok(())
 }

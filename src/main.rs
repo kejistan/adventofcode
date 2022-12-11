@@ -69,16 +69,21 @@ fn main() -> io::Result<()> {
       Monkey { items, operation, test, inspect_count: 0 }
   }).collect::<Vec<Monkey>>();
 
+  let monkey_worry_mod = monkeys.iter().fold(1, |acc, monkey| {
+    acc * monkey.test.divisible_by as usize
+  });
+
   let mut item_inspect_counts = Vec::with_capacity(monkeys.len());
   for _ in 0..monkeys.len() {
     item_inspect_counts.push(0);
   }
 
-  for _ in 0..20 {
+  for _ in 0..10_000 {
     for i in 0..monkeys.len() {
       let monkey = &mut monkeys[i];
 
-      for (item, target) in monkey.inspect_items() {
+      for (mut item, target) in monkey.inspect_items() {
+        item.worry_level %= monkey_worry_mod;
         monkeys[target].items.push_back(item);
       }
     }
@@ -98,7 +103,6 @@ impl Monkey {
   fn inspect_items(&mut self) -> Vec<(Item, usize)> {
     self.items.drain(..).map(|mut item| {
       self.operation.apply(&mut item);
-      item.worry_level /= 3;
       self.inspect_count += 1;
 
       let target = self.test.apply(&item);

@@ -1,133 +1,100 @@
 use std::collections::VecDeque;
 use std::{io};
-use std::io::{BufReader};
+use std::io::{BufReader, BufRead};
 
-use regex::Regex;
-
-use crate::grouped_iterator::GroupedIterator;
-
-mod grouped_iterator;
-
-enum Operation {
-  Add(u8),
-  Mul(u8),
-  AddSelf,
-  MulSelf,
+struct MapTile {
+  elevation: u8,
+  distance: Option<u32>,
 }
 
-struct Item {
-  worry_level: usize,
-}
-
-struct Test {
-  divisible_by: u8,
-  if_true: usize,
-  if_false: usize,
-}
-
-struct Monkey {
-  items: VecDeque<Item>,
-  operation: Operation,
-  test: Test,
-  inspect_count: usize,
-}
+type Coord = (usize, usize);
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
 
-  let items_regex = Regex::new(r"(\d+)").unwrap();
-  let operation_regex = Regex::new(r"new = old (\+|\*) (old|\d+)").unwrap();
-  let divisible_by_regex = Regex::new(r"divisible by (\d+)").unwrap();
-  let throw_regex = Regex::new(r"throw to monkey (\d+)").unwrap();
+  let mut source = (0, 0);
+  let mut destination = (0, 0);
+  let mut x: usize = 0;
+  let mut y: usize = 0;
+  let mut map = input.lines().map(|result| {
+    let line = result.unwrap();
 
-  let mut monkeys = input.groups().map(|result| {
-      let string = result.unwrap();
-      let mut lines = string.lines().skip(1);
-      let items = items_regex.captures_iter(lines.next().unwrap())
-        .map(|capture| Item { worry_level: capture.get(1).unwrap().as_str().parse::<usize>().unwrap() })
-        .collect::<VecDeque<Item>>();
-      let operation_capture = operation_regex.captures(lines.next().unwrap()).unwrap();
-      let operation;
-      if operation_capture.get(2).unwrap().as_str() == "old" {
-        operation = match operation_capture.get(1).unwrap().as_str() {
-          "*" => Operation::MulSelf,
-          "+" => Operation::AddSelf,
-          _ => unreachable!(),
-        };
-      } else {
-        operation = match operation_capture.get(1).unwrap().as_str() {
-          "*" => Operation::Mul(operation_capture.get(2).unwrap().as_str().parse::<u8>().unwrap()),
-          "+" => Operation::Add(operation_capture.get(2).unwrap().as_str().parse::<u8>().unwrap()),
-          _ => unreachable!(),
-        };
-      }
-      let divisible_by = divisible_by_regex.captures(lines.next().unwrap()).unwrap().get(1).unwrap().as_str().parse::<u8>().unwrap();
-      let if_true = throw_regex.captures(lines.next().unwrap()).unwrap().get(1).unwrap().as_str().parse::<usize>().unwrap();
-      let if_false = throw_regex.captures(lines.next().unwrap()).unwrap().get(1).unwrap().as_str().parse::<usize>().unwrap();
-      let test = Test { divisible_by, if_true, if_false };
-      
-      Monkey { items, operation, test, inspect_count: 0 }
-  }).collect::<Vec<Monkey>>();
+    x = 0;
+    let row = line.chars().into_iter().map(|char| {
+      let tile = match char {
+        'S' => {
+          source = (x, y);
+          MapTile::new(0)
+        },
+        'E' => {
+          destination = (x, y);
+          MapTile { elevation: 25, distance: Some(0) }
+        }
+        _ => {
+          let elevation = char as u8 - 'a' as u8;
+          MapTile::new(elevation)
+        }
+      };
 
-  let monkey_worry_mod = monkeys.iter().fold(1, |acc, monkey| {
-    acc * monkey.test.divisible_by as usize
-  });
+      x += 1;
+      tile
+    }).collect::<Vec<MapTile>>();
 
-  let mut item_inspect_counts = Vec::with_capacity(monkeys.len());
-  for _ in 0..monkeys.len() {
-    item_inspect_counts.push(0);
-  }
+    y += 1;
+    row
+  }).collect::<Vec<Vec<MapTile>>>();
 
-  for _ in 0..10_000 {
-    for i in 0..monkeys.len() {
-      let monkey = &mut monkeys[i];
+  let mut queue = neighbors(&mut map, destination).into_iter().collect::<VecDeque<Coord>>();
 
-      for (mut item, target) in monkey.inspect_items() {
-        item.worry_level %= monkey_worry_mod;
-        monkeys[target].items.push_back(item);
-      }
+  while queue.len() > 0 {
+    let coordinate = queue.pop_front().unwrap();
+
+    for coordinate in neighbors(&mut map, coordinate).into_iter() {
+      queue.push_back(coordinate);
     }
   }
 
-  monkeys.sort_unstable_by(|a, b| {
-    b.inspect_count.cmp(&a.inspect_count)
-  });
-
-  let result: usize = monkeys[0..2].iter().map(|monkey| monkey.inspect_count).product();
+  let result = map[source.1][source.0].distance.unwrap();
   println!("{}", result);
 
   Ok(())
 }
 
-impl Monkey {
-  fn inspect_items(&mut self) -> Vec<(Item, usize)> {
-    self.items.drain(..).map(|mut item| {
-      self.operation.apply(&mut item);
-      self.inspect_count += 1;
-
-      let target = self.test.apply(&item);
-      (item, target)
-    }).collect()
+impl MapTile {
+  fn new(elevation: u8) -> Self {
+    MapTile { elevation, distance: None }
   }
 }
 
-impl Operation {
-  fn apply(&self, item: &mut Item) {
-    match self {
-      Operation::Add(arg) => item.worry_level += *arg as usize,
-      Operation::Mul(arg) => item.worry_level *= *arg as usize,
-      Operation::AddSelf => item.worry_level += item.worry_level,
-      Operation::MulSelf => item.worry_level *= item.worry_level,
-    }
-  }
-}
+fn neighbors(map: &mut Vec<Vec<MapTile>>, coordinate: Coord) -> Vec<Coord> {
+  let mut coordinates = vec![];
+  let mut offsets: Vec<(i8, i8)> = Vec::new();
 
-impl Test {
-  fn apply(&self, item: &Item) -> usize {
-    if item.worry_level % self.divisible_by as usize == 0 {
-      self.if_true
-    } else {
-      self.if_false
+  if coordinate.1 != 0 {
+    offsets.push((0, -1));
+  }
+  if coordinate.1 != map.len() - 1 {
+    offsets.push((0, 1));
+  }
+  if coordinate.0 != 0 {
+    offsets.push((-1, 0));
+  }
+  if coordinate.0 != map[0].len() - 1 {
+    offsets.push((1, 0));
+  }
+
+  let current_tile = &map[coordinate.1][coordinate.0];
+  let elevation = current_tile.elevation;
+  let distance = current_tile.distance.unwrap();
+  
+  for (x_offset, y_offset) in offsets.into_iter() {
+    let x = (coordinate.0 as isize + x_offset as isize) as usize;
+    let y = (coordinate.1 as isize + y_offset as isize) as usize;
+    if map[y][x].elevation + 1 >= elevation && map[y][x].distance.is_none() {
+      map[y][x].distance = Some(distance + 1);
+      coordinates.push((x, y));
     }
   }
+
+  coordinates
 }

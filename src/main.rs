@@ -54,7 +54,15 @@ fn main() -> io::Result<()> {
     }
   }
 
-  let result = map[source.1][source.0].distance.unwrap();
+  let result = map.into_iter()
+    .flat_map(|row| row.into_iter())
+    .filter(|tile| tile.elevation == 0 && tile.distance.is_some())
+    .min_by(|a, b| {
+      a.distance.unwrap().cmp(&b.distance.unwrap())
+    })
+    .unwrap()
+    .distance
+    .unwrap();
   println!("{}", result);
 
   Ok(())

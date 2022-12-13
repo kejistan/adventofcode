@@ -1,108 +1,107 @@
 use std::collections::VecDeque;
 use std::{io};
-use std::io::{BufReader, BufRead};
+use std::io::{BufReader};
 
-struct MapTile {
-  elevation: u8,
-  distance: Option<u32>,
-}
+use crate::grouped_iterator::GroupedIterator;
 
-type Coord = (usize, usize);
+mod grouped_iterator;
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
 
-  let mut source = (0, 0);
-  let mut destination = (0, 0);
-  let mut x: usize = 0;
-  let mut y: usize = 0;
-  let mut map = input.lines().map(|result| {
-    let line = result.unwrap();
+  let results = input.groups().map(|result| {
+    let pair_str = result.unwrap();
+    let mut lines = pair_str.lines();
+    let left_packet = tokenize(lines.next().unwrap());
+    let right_packet = tokenize(lines.next().unwrap());
 
-    x = 0;
-    let row = line.chars().into_iter().map(|char| {
-      let tile = match char {
-        'S' => {
-          source = (x, y);
-          MapTile::new(0)
-        },
-        'E' => {
-          destination = (x, y);
-          MapTile { elevation: 25, distance: Some(0) }
-        }
-        _ => {
-          let elevation = char as u8 - 'a' as u8;
-          MapTile::new(elevation)
-        }
-      };
+    packets_are_in_order(left_packet, right_packet)
+  });
 
-      x += 1;
-      tile
-    }).collect::<Vec<MapTile>>();
-
-    y += 1;
-    row
-  }).collect::<Vec<Vec<MapTile>>>();
-
-  let mut queue = neighbors(&mut map, destination).into_iter().collect::<VecDeque<Coord>>();
-
-  while queue.len() > 0 {
-    let coordinate = queue.pop_front().unwrap();
-
-    for coordinate in neighbors(&mut map, coordinate).into_iter() {
-      queue.push_back(coordinate);
+  let result: usize = results.enumerate().map(|(i, result)| {
+    if result {
+      i + 1
+    } else {
+      0
     }
-  }
+  }).sum();
 
-  let result = map.into_iter()
-    .flat_map(|row| row.into_iter())
-    .filter(|tile| tile.elevation == 0 && tile.distance.is_some())
-    .min_by(|a, b| {
-      a.distance.unwrap().cmp(&b.distance.unwrap())
-    })
-    .unwrap()
-    .distance
-    .unwrap();
   println!("{}", result);
 
   Ok(())
 }
 
-impl MapTile {
-  fn new(elevation: u8) -> Self {
-    MapTile { elevation, distance: None }
-  }
+#[derive(Debug, PartialEq)]
+enum Token {
+  Number(u8),
+  ListStart,
+  ListEnd,
 }
 
-fn neighbors(map: &mut Vec<Vec<MapTile>>, coordinate: Coord) -> Vec<Coord> {
-  let mut coordinates = vec![];
-  let mut offsets: Vec<(i8, i8)> = Vec::new();
-
-  if coordinate.1 != 0 {
-    offsets.push((0, -1));
-  }
-  if coordinate.1 != map.len() - 1 {
-    offsets.push((0, 1));
-  }
-  if coordinate.0 != 0 {
-    offsets.push((-1, 0));
-  }
-  if coordinate.0 != map[0].len() - 1 {
-    offsets.push((1, 0));
-  }
-
-  let current_tile = &map[coordinate.1][coordinate.0];
-  let elevation = current_tile.elevation;
-  let distance = current_tile.distance.unwrap();
-  
-  for (x_offset, y_offset) in offsets.into_iter() {
-    let x = (coordinate.0 as isize + x_offset as isize) as usize;
-    let y = (coordinate.1 as isize + y_offset as isize) as usize;
-    if map[y][x].elevation + 1 >= elevation && map[y][x].distance.is_none() {
-      map[y][x].distance = Some(distance + 1);
-      coordinates.push((x, y));
+fn tokenize(string: &str) -> VecDeque<Token> {
+  let mut tokens = VecDeque::new();
+  let mut token_start = 0;
+  for (token_end, current_char) in string.char_indices() {
+    match current_char {
+      ',' | '[' | ']' => {
+        if token_start != token_end {
+          tokens.push_back(Token::Number(string[token_start..token_end].parse::<u8>().unwrap()));
+        }
+        match current_char {
+          '[' => tokens.push_back(Token::ListStart),
+          ']' => tokens.push_back(Token::ListEnd),
+          _ => (),
+        }
+        token_start = token_end + 1;
+      },
+      _ => (),
     }
   }
 
-  coordinates
+  tokens
+}
+
+fn packets_are_in_order(mut left_vec: VecDeque<Token>, mut right_vec: VecDeque<Token>) -> bool {
+  let mut left = left_vec.pop_front();
+  let mut right = right_vec.pop_front();
+
+  while left.is_some() && right.is_some() {
+    if left == right {
+      left = left_vec.pop_front();
+      right = right_vec.pop_front();
+      continue;
+    }
+
+    if right == Some(Token::ListEnd) {
+      return false;
+    }
+    if left == Some(Token::ListEnd) {
+      return true;
+    }
+
+    if right == Some(Token::ListStart) {
+      left_vec.push_front(Token::ListEnd);
+      left_vec.push_front(left.unwrap());
+      left = Some(Token::ListStart);
+      continue;
+    }
+    if left == Some(Token::ListStart) {
+      right_vec.push_front(Token::ListEnd);
+      right_vec.push_front(right.unwrap());
+      right = Some(Token::ListStart);
+      continue;
+    }
+
+    if let Token::Number(l) = left.unwrap() {
+      if let Token::Number(r) = right.unwrap() {
+        return l < r;
+      } else {
+        panic!();
+      }
+    } else {
+      panic!();
+    }
+  }
+
+  !left.is_some()
 }

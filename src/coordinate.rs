@@ -1,4 +1,5 @@
 use std::ops::{AddAssign, Sub};
+use std::fmt::Debug;
 
 #[derive(Clone, Copy, PartialEq, Hash, Eq)]
 pub struct Coordinate {
@@ -9,6 +10,12 @@ pub struct Coordinate {
 impl Coordinate {
   pub fn new(x: i32, y: i32) -> Coordinate {
     Coordinate { x, y }
+  }
+}
+
+impl Debug for Coordinate {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!("({},{})", self.x, self.y))
   }
 }
 

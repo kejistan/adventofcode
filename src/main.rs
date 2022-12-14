@@ -1,127 +1,118 @@
-use std::collections::VecDeque;
+use std::cmp::{min, max};
+use std::collections::{HashSet, HashMap};
+use std::ops::{RangeInclusive};
 use std::{io};
 use std::io::{BufReader, BufRead};
 
-mod grouped_iterator;
+use regex::Regex;
 
-#[derive(Eq, PartialEq)]
-struct Packet {
-  tokens: Vec<Token>,
+use crate::coordinate::Coordinate;
+
+mod coordinate;
+
+enum Line {
+  Horizontal(RangeInclusive<i32>),
+  Vertical(RangeInclusive<i32>),
+}
+struct CoordinateProducer {
+  x: i32,
+  y: i32,
+
+  line: Line,
 }
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
 
-  let packets = input.lines().filter_map(|result| {
+  let coord_re = Regex::new(r"(\d+),(\d+)").unwrap();
+
+  let mut occupied_coordinates = input.lines().flat_map(|result| {
     let line = result.unwrap();
-    if line == "" {
-      return None
-    }
+    let coordinates = coord_re.captures_iter(&line).map(|captures| {
+      let x = captures.get(1).unwrap().as_str().parse::<i32>().unwrap();
+      let y = captures.get(2).unwrap().as_str().parse::<i32>().unwrap();
 
-    Some(Packet { tokens: tokenize(&line) })
-  }).collect::<Vec<Packet>>();
+      Coordinate::new(x, y)
+    }).collect::<Vec<Coordinate>>();
 
-  let mut divider_one_idx = 1;
-  let mut divider_two_idx = 2;
-  let divider_one = Packet { tokens: tokenize("[[2]]") };
-  let divider_two = Packet { tokens: tokenize("[[6]]") };
-  for packet in packets {
-    if packet < divider_one {
-      divider_one_idx += 1;
-    }
-    if packet < divider_two {
-      divider_two_idx += 1;
+    coordinates.windows(2).flat_map(|pair| {
+      if let [start, end] = pair {
+        if start.x == end.x {
+          let y_start = min(start.y, end.y);
+          let y_end = max(start.y, end.y);
+          CoordinateProducer { x: start.x, y: y_start, line: Line::Vertical(y_start..=y_end) }
+        } else {
+          let x_start = min(start.x, end.x);
+          let x_end = max(start.x, end.x);
+          CoordinateProducer { x: x_start, y: start.y, line: Line::Horizontal(x_start..=x_end) }
+        }
+      } else {
+        unreachable!();
+      }
+    }).collect::<Vec<Coordinate>>()
+  }).collect::<HashSet<Coordinate>>();
+
+  let mut max_y: HashMap<i32, i32> = HashMap::new();
+  for coordinate in occupied_coordinates.iter() {
+    max_y.entry(coordinate.x).and_modify(|y| *y = max(*y, coordinate.y)).or_insert(coordinate.y);
+  }
+
+  let mut sand_count = 0;
+  'outer: loop {
+    let mut coordinate = Coordinate::new(500, 0);
+
+    loop {
+      if max_y.get(&coordinate.x).unwrap_or(&0) <= &coordinate.y {
+        break 'outer;
+      }
+      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x, coordinate.y + 1)) {
+        coordinate.y += 1;
+        continue;
+      } else if !occupied_coordinates.contains(&Coordinate::new(coordinate.x - 1, coordinate.y + 1)) {
+        coordinate.x -= 1;
+        coordinate.y += 1;
+        continue;
+      } else if !occupied_coordinates.contains(&Coordinate::new(coordinate.x + 1, coordinate.y + 1)) {
+        coordinate.x += 1;
+        coordinate.y += 1;
+        continue;
+      } else {
+        sand_count += 1;
+        occupied_coordinates.insert(coordinate);
+        break;
+      }
     }
   }
 
-  let result = divider_one_idx * divider_two_idx;
-  println!("{}", result);
+  println!("{}", sand_count);
 
   Ok(())
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum Token {
-  Number(u8),
-  ListStart,
-  ListEnd,
-}
+impl Iterator for CoordinateProducer {
+  type Item = Coordinate;
 
-fn tokenize(string: &str) -> Vec<Token> {
-  let mut tokens = Vec::new();
-  let mut token_start = 0;
-  for (token_end, current_char) in string.char_indices() {
-    match current_char {
-      ',' | '[' | ']' => {
-        if token_start != token_end {
-          tokens.push(Token::Number(string[token_start..token_end].parse::<u8>().unwrap()));
-        }
-        match current_char {
-          '[' => tokens.push(Token::ListStart),
-          ']' => tokens.push(Token::ListEnd),
-          _ => (),
-        }
-        token_start = token_end + 1;
-      },
-      _ => (),
-    }
-  }
-
-  tokens
-}
-
-impl PartialOrd for Packet {
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let mut left_queue = VecDeque::from_iter(self.tokens.iter());
-    let mut right_queue = VecDeque::from_iter(other.tokens.iter());
-
-    let mut left = left_queue.pop_front();
-    let mut right = right_queue.pop_front();
-    while left.is_some() && right.is_some() {
-      if left == right {
-        left = left_queue.pop_front();
-        right = right_queue.pop_front();
-        continue;
-      }
-  
-      if right == Some(&Token::ListEnd) {
-        return Some(std::cmp::Ordering::Greater);
-      }
-      if left == Some(&Token::ListEnd) {
-        return Some(std::cmp::Ordering::Less);
-      }
-  
-      if right == Some(&Token::ListStart) {
-        left_queue.push_front(&Token::ListEnd);
-        left_queue.push_front(left.unwrap());
-        left = Some(&Token::ListStart);
-        continue;
-      }
-      if left == Some(&Token::ListStart) {
-        right_queue.push_front(&Token::ListEnd);
-        right_queue.push_front(right.unwrap());
-        right = Some(&Token::ListStart);
-        continue;
-      }
-  
-      if let Token::Number(l) = left.unwrap() {
-        if let Token::Number(r) = right.unwrap() {
-          return Some(l.cmp(r));
+  fn next(&mut self) -> Option<Self::Item> {
+    let result;
+    match &self.line {
+      Line::Horizontal(range) => {
+        if range.contains(&self.x) {
+          result = Some(Coordinate::new(self.x, self.y));
+          self.x += 1;
         } else {
-          panic!();
+          result = None;
         }
-      } else {
-        panic!();
-      }
-    }
-  
-    if left == right {
-      return Some(std::cmp::Ordering::Equal);
-    }
-    if left.is_some() {
-      return Some(std::cmp::Ordering::Greater);
+      },
+      Line::Vertical(range) => {
+        if range.contains(&self.y) {
+          result = Some(Coordinate::new(self.x, self.y));
+          self.y += 1;
+        } else {
+          result = None;
+        }
+      },
     }
 
-    Some(std::cmp::Ordering::Less)
+    result
   }
 }

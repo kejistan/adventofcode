@@ -1,5 +1,5 @@
 use std::cmp::{min, max};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet};
 use std::ops::{RangeInclusive};
 use std::{io};
 use std::io::{BufReader, BufRead};
@@ -52,35 +52,35 @@ fn main() -> io::Result<()> {
     }).collect::<Vec<Coordinate>>()
   }).collect::<HashSet<Coordinate>>();
 
-  let mut max_y: HashMap<i32, i32> = HashMap::new();
-  for coordinate in occupied_coordinates.iter() {
-    max_y.entry(coordinate.x).and_modify(|y| *y = max(*y, coordinate.y)).or_insert(coordinate.y);
-  }
+  let max_y = occupied_coordinates.iter().map(|coord| coord.y).max().unwrap() + 1;
 
   let mut sand_count = 0;
-  'outer: loop {
+  while !occupied_coordinates.contains(&Coordinate::new(500, 0)) {
     let mut coordinate = Coordinate::new(500, 0);
 
     loop {
-      if max_y.get(&coordinate.x).unwrap_or(&0) <= &coordinate.y {
-        break 'outer;
-      }
-      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x, coordinate.y + 1)) {
-        coordinate.y += 1;
-        continue;
-      } else if !occupied_coordinates.contains(&Coordinate::new(coordinate.x - 1, coordinate.y + 1)) {
-        coordinate.x -= 1;
-        coordinate.y += 1;
-        continue;
-      } else if !occupied_coordinates.contains(&Coordinate::new(coordinate.x + 1, coordinate.y + 1)) {
-        coordinate.x += 1;
-        coordinate.y += 1;
-        continue;
-      } else {
+      if max_y == coordinate.y {
         sand_count += 1;
         occupied_coordinates.insert(coordinate);
         break;
       }
+      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x, coordinate.y + 1)) {
+        coordinate.y += 1;
+        continue;
+      }
+      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x - 1, coordinate.y + 1)) {
+        coordinate.x -= 1;
+        coordinate.y += 1;
+        continue;
+      }
+      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x + 1, coordinate.y + 1)) {
+        coordinate.x += 1;
+        coordinate.y += 1;
+        continue;
+      }
+      sand_count += 1;
+      occupied_coordinates.insert(coordinate);
+      break;
     }
   }
 

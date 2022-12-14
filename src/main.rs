@@ -1,5 +1,5 @@
 use std::cmp::{min, max};
-use std::collections::{HashSet};
+use std::collections::{HashSet, VecDeque};
 use std::ops::{RangeInclusive};
 use std::{io};
 use std::io::{BufReader, BufRead};
@@ -54,34 +54,39 @@ fn main() -> io::Result<()> {
 
   let max_y = occupied_coordinates.iter().map(|coord| coord.y).max().unwrap() + 1;
 
-  let mut sand_count = 0;
-  while !occupied_coordinates.contains(&Coordinate::new(500, 0)) {
-    let mut coordinate = Coordinate::new(500, 0);
+  let mut path = VecDeque::new();
+  path.push_back(Coordinate::new(500, 0));
 
-    loop {
-      if max_y == coordinate.y {
-        sand_count += 1;
-        occupied_coordinates.insert(coordinate);
-        break;
-      }
-      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x, coordinate.y + 1)) {
-        coordinate.y += 1;
-        continue;
-      }
-      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x - 1, coordinate.y + 1)) {
-        coordinate.x -= 1;
-        coordinate.y += 1;
-        continue;
-      }
-      if !occupied_coordinates.contains(&Coordinate::new(coordinate.x + 1, coordinate.y + 1)) {
-        coordinate.x += 1;
-        coordinate.y += 1;
-        continue;
-      }
+  let mut sand_count = 0;
+  while !path.is_empty() {
+    let coordinate = path.back().unwrap();
+    if max_y == coordinate.y {
       sand_count += 1;
-      occupied_coordinates.insert(coordinate);
-      break;
+      occupied_coordinates.insert(*coordinate);
+      path.pop_back();
+      continue;
     }
+
+    let mut next_coordinate = Coordinate::new(coordinate.x, coordinate.y + 1);
+    if !occupied_coordinates.contains(&next_coordinate) {
+      path.push_back(next_coordinate);
+      continue;
+    }
+
+    next_coordinate.x -= 1;
+    if !occupied_coordinates.contains(&next_coordinate) {
+      path.push_back(next_coordinate);
+      continue;
+    }
+
+    next_coordinate.x += 2;
+    if !occupied_coordinates.contains(&next_coordinate) {
+      path.push_back(next_coordinate);
+      continue;
+    }
+    sand_count += 1;
+    occupied_coordinates.insert(*coordinate);
+    path.pop_back();
   }
 
   println!("{}", sand_count);

@@ -1,6 +1,4 @@
-use std::cmp::{min, max};
 use std::collections::{HashSet};
-use std::ops::RangeInclusive;
 use std::{io};
 use std::io::{BufReader, BufRead};
 
@@ -39,38 +37,44 @@ fn main() -> io::Result<()> {
     }
   }).collect::<Vec<Sensor>>();
 
-  let x_range = sensors.iter()
-    .map(|sensor| sensor.x_range())
-    .reduce(|acc, sensor| {
-      min(*acc.start(), *sensor.start())..=max(*acc.end(), *sensor.end())
-    }).unwrap();
-
-  let mut result = 0;
-  for x in x_range {
-    let coordinate = Coordinate::new(x, 2_000_000);
-    if known_beacons.contains(&coordinate) {
-      continue;
-    }
-
-    let contains = sensors.iter().any(|sensor| {
-      sensor.contains(&coordinate)
-    });
-
-    if contains {
-      result += 1;
+  let mut open_space = Coordinate::new(0, 0);
+  while !is_unoccupied(&sensors, &open_space) {
+    let next = next_unoccupied(&sensors, &open_space);
+    if next.x >= 4_000_000 {
+      open_space.y += 1;
+      open_space.x = 0;
+    } else {
+      open_space = next;
     }
   }
 
-  println!("{}", result);
+  let result = open_space;
+
+  println!("{}", result.x as u64 * 4_000_000 + result.y as u64);
 
   Ok(())
 }
 
-impl Sensor {
-  fn x_range(&self) -> RangeInclusive<i32> {
-    (self.position.x - self.radius)..=(self.position.x + self.radius)
-  }
+fn is_unoccupied(sensors: &Vec<Sensor>, coordinate: &Coordinate) -> bool {
+  !sensors.iter().any(|sensor| sensor.contains(coordinate))
+}
 
+fn next_unoccupied(sensors: &Vec<Sensor>, coordinate: &Coordinate) -> Coordinate {
+  let max_coordinate = sensors.iter().filter_map(|sensor| {
+    if sensor.contains(&coordinate) {
+      let available_distance = sensor.radius - (sensor.position.y - coordinate.y).abs();
+      Some(Coordinate::new(sensor.position.x + available_distance, coordinate.y))
+    } else {
+      None
+    }
+  }).max_by(|a, b| {
+    a.x.cmp(&b.x)
+  });
+
+  max_coordinate.unwrap_or(*coordinate) + Coordinate::new(1, 0)
+}
+
+impl Sensor {
   fn contains(&self, coordinate: &Coordinate) -> bool {
     let distance = self.position - *coordinate;
     self.radius >= distance.x.abs() + distance.y.abs()

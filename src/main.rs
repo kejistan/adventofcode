@@ -1,82 +1,87 @@
-use std::collections::{HashSet};
+use std::collections::{HashMap, HashSet};
 use std::{io};
 use std::io::{BufReader, BufRead};
 
-use coordinate::Coordinate;
 use regex::Regex;
 
 mod coordinate;
 
-struct Sensor {
-  position: Coordinate,
-  radius: i32,
+#[derive(Debug)]
+struct Valve {
+  id: String,
+  flow_rate: u32,
+  connections: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ExplorationState<'a> {
+  open_valves: HashSet<String>,
+  current_pos: &'a str,
+  score: u32,
+  remaining_time: u32,
 }
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
+  let valve_info_regex = Regex::new(r"Valve ([A-Z]+) has flow rate=(\d+); tunnel(?:s)? lead(?:s)? to valve(?:s)? ").unwrap();
+  let tunnels_regex = Regex::new(r"[A-Z]+").unwrap();
 
-  let coordinate_re = Regex::new(r"at x=(-?\d+), y=(-?\d+)").unwrap();
-
-  let mut known_beacons = HashSet::new();
-  let sensors = input.lines().map(|result| {
+  let valves = input.lines().map(|result| {
     let line = result.unwrap();
-    let mut coordinates = coordinate_re.captures_iter(&line).map(|captures| {
-      Coordinate::new(captures.get(1).unwrap().as_str().parse::<i32>().unwrap(), captures.get(2).unwrap().as_str().parse::<i32>().unwrap())
-    });
-    let position = coordinates.next().unwrap();
-    let beacon = coordinates.next().unwrap();
+    let captures = valve_info_regex.captures(&line).unwrap();
+    let id = captures.get(1).unwrap().as_str().to_string();
+    let flow_rate = captures.get(2).unwrap().as_str().parse::<u32>().unwrap();
 
-    known_beacons.insert(beacon);
+    let connections = tunnels_regex.find_iter(&line[captures.get(0).unwrap().end()..]).map(|cap| cap.as_str().to_string()).collect::<Vec<String>>();
 
-    let distance = position - beacon;
+    (id.clone(), Valve {
+      id,
+      flow_rate,
+      connections,
+    })
+  }).collect::<HashMap<String, Valve>>();
 
-    let radius = distance.x.abs() + distance.y.abs();
-    Sensor {
-      position,
-      radius,
+  let first_state = ExplorationState { open_valves: HashSet::new(), current_pos: "AA", score: 0, remaining_time: 30 };
+  let mut states = Vec::new();
+  states.push(first_state);
+
+  for _ in 0..30 {
+    let mut new_states = Vec::new();
+    let max_score = states.iter().map(|state| state.score).max().unwrap();
+    for mut state in states.into_iter().filter(|state| state.score + 40 >= max_score) {
+      let score = score_valves(&valves, &state.open_valves);
+      state.remaining_time -= 1;
+      state.score += score;
+
+      if !state.open_valves.contains(state.current_pos) {
+        let mut new_state = state.clone();
+        new_state.open_valves.insert(state.current_pos.to_string());
+        new_states.push(new_state);
+      }
+
+      let current_valve = valves.get(state.current_pos).unwrap();
+      for neighbor in current_valve.connections.iter() {
+        let mut new_state = state.clone();
+        new_state.current_pos = neighbor;
+        new_states.push(new_state);
+      }
     }
-  }).collect::<Vec<Sensor>>();
-
-  let mut open_space = Coordinate::new(0, 0);
-  while !is_unoccupied(&sensors, &open_space) {
-    let next = next_unoccupied(&sensors, &open_space);
-    if next.x >= 4_000_000 {
-      open_space.y += 1;
-      open_space.x = 0;
-    } else {
-      open_space = next;
-    }
+    states = new_states;
   }
 
-  let result = open_space;
+  let result = states.into_iter().map(|state| state.score).max().unwrap();
 
-  println!("{}", result.x as u64 * 4_000_000 + result.y as u64);
+  println!("{}", result);
 
   Ok(())
 }
 
-fn is_unoccupied(sensors: &Vec<Sensor>, coordinate: &Coordinate) -> bool {
-  !sensors.iter().any(|sensor| sensor.contains(coordinate))
-}
-
-fn next_unoccupied(sensors: &Vec<Sensor>, coordinate: &Coordinate) -> Coordinate {
-  let max_coordinate = sensors.iter().filter_map(|sensor| {
-    if sensor.contains(&coordinate) {
-      let available_distance = sensor.radius - (sensor.position.y - coordinate.y).abs();
-      Some(Coordinate::new(sensor.position.x + available_distance, coordinate.y))
+fn score_valves(valves: &HashMap<String, Valve>, open_valves: &HashSet<String>) -> u32 {
+  valves.values().filter_map(|valve| {
+    if open_valves.contains(&valve.id) {
+      Some(valve.flow_rate)
     } else {
       None
     }
-  }).max_by(|a, b| {
-    a.x.cmp(&b.x)
-  });
-
-  max_coordinate.unwrap_or(*coordinate) + Coordinate::new(1, 0)
-}
-
-impl Sensor {
-  fn contains(&self, coordinate: &Coordinate) -> bool {
-    let distance = self.position - *coordinate;
-    self.radius >= distance.x.abs() + distance.y.abs()
-  }
+  }).sum()
 }

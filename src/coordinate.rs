@@ -27,6 +27,14 @@ impl Add for Coordinate {
   }
 }
 
+impl Add for &Coordinate {
+  type Output = Coordinate;
+
+  fn add(self, other: Self) -> Coordinate {
+    Coordinate::new(self.x + other.x, self.y + other.y)
+  }
+}
+
 impl AddAssign for Coordinate {
   fn add_assign(&mut self, other: Self) {
     self.x += other.x;

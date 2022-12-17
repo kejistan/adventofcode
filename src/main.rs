@@ -1,87 +1,174 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::{io};
-use std::io::{BufReader, BufRead};
+use std::io::{BufReader, Read};
 
-use regex::Regex;
+use coordinate::Coordinate;
 
 mod coordinate;
 
-#[derive(Debug)]
-struct Valve {
-  id: String,
-  flow_rate: u32,
-  connections: Vec<String>,
+enum Direction {
+  Left,
+  Right,
 }
 
-#[derive(Clone)]
-struct ExplorationState<'a> {
-  open_valves: HashSet<String>,
-  current_pos: &'a str,
-  score: u32,
-  remaining_time: u32,
+struct Shape {
+  coordinates: Vec<Coordinate>,
+}
+
+struct Tunnel {
+  height: i32,
+  occupied: HashSet<Coordinate>,
 }
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
-  let valve_info_regex = Regex::new(r"Valve ([A-Z]+) has flow rate=(\d+); tunnel(?:s)? lead(?:s)? to valve(?:s)? ").unwrap();
-  let tunnels_regex = Regex::new(r"[A-Z]+").unwrap();
 
-  let valves = input.lines().map(|result| {
-    let line = result.unwrap();
-    let captures = valve_info_regex.captures(&line).unwrap();
-    let id = captures.get(1).unwrap().as_str().to_string();
-    let flow_rate = captures.get(2).unwrap().as_str().parse::<u32>().unwrap();
+  let all_directions = input.bytes().map(|result| match result.unwrap() as char {
+    '<' => Direction::Left,
+    '>' => Direction::Right,
+    _ => unreachable!(),
+  }).collect::<Vec<Direction>>();
 
-    let connections = tunnels_regex.find_iter(&line[captures.get(0).unwrap().end()..]).map(|cap| cap.as_str().to_string()).collect::<Vec<String>>();
+  let all_shapes = vec![
+    Shape { coordinates: vec![
+      Coordinate::new(0, 0),
+      Coordinate::new(1, 0),
+      Coordinate::new(2, 0),
+      Coordinate::new(3, 0),
+    ], },
+    Shape { coordinates: vec![
+      Coordinate::new(1, 0),
+      Coordinate::new(0, 1),
+      Coordinate::new(1, 1),
+      Coordinate::new(2, 1),
+      Coordinate::new(1, 2),
+    ], },
+    Shape { coordinates: vec![
+      Coordinate::new(0, 0),
+      Coordinate::new(1, 0),
+      Coordinate::new(2, 0),
+      Coordinate::new(2, 1),
+      Coordinate::new(2, 2),
+    ], },
+    Shape { coordinates: vec![
+      Coordinate::new(0, 0),
+      Coordinate::new(0, 1),
+      Coordinate::new(0, 2),
+      Coordinate::new(0, 3),
+    ], },
+    Shape { coordinates: vec![
+      Coordinate::new(0, 0),
+      Coordinate::new(1, 0),
+      Coordinate::new(0, 1),
+      Coordinate::new(1, 1),
+    ], },
+  ];
 
-    (id.clone(), Valve {
-      id,
-      flow_rate,
-      connections,
-    })
-  }).collect::<HashMap<String, Valve>>();
+  let mut tunnel = Tunnel::new();
+  let mut directions = all_directions.cycle();
+  let mut shapes = all_shapes.cycle();
 
-  let first_state = ExplorationState { open_valves: HashSet::new(), current_pos: "AA", score: 0, remaining_time: 30 };
-  let mut states = Vec::new();
-  states.push(first_state);
+  for _ in 0..2022 {
+    let rock = shapes.next().unwrap();
+    let mut coordinate = tunnel.start_coordinate();
 
-  for _ in 0..30 {
-    let mut new_states = Vec::new();
-    let max_score = states.iter().map(|state| state.score).max().unwrap();
-    for mut state in states.into_iter().filter(|state| state.score + 40 >= max_score) {
-      let score = score_valves(&valves, &state.open_valves);
-      state.remaining_time -= 1;
-      state.score += score;
-
-      if !state.open_valves.contains(state.current_pos) {
-        let mut new_state = state.clone();
-        new_state.open_valves.insert(state.current_pos.to_string());
-        new_states.push(new_state);
-      }
-
-      let current_valve = valves.get(state.current_pos).unwrap();
-      for neighbor in current_valve.connections.iter() {
-        let mut new_state = state.clone();
-        new_state.current_pos = neighbor;
-        new_states.push(new_state);
+    loop {
+      coordinate = handle_jet(&rock, coordinate, &mut directions, &tunnel);
+      if let Some(coord) = fall(&rock, coordinate, &mut tunnel) {
+        coordinate = coord;
+      } else {
+        break;
       }
     }
-    states = new_states;
   }
 
-  let result = states.into_iter().map(|state| state.score).max().unwrap();
+
+  let result = tunnel.height;
 
   println!("{}", result);
 
   Ok(())
 }
 
-fn score_valves(valves: &HashMap<String, Valve>, open_valves: &HashSet<String>) -> u32 {
-  valves.values().filter_map(|valve| {
-    if open_valves.contains(&valve.id) {
-      Some(valve.flow_rate)
-    } else {
-      None
+fn handle_jet(rock: &Shape, mut coordinate: Coordinate, directions: &mut dyn Iterator<Item = &Direction>, tunnel: &Tunnel) -> Coordinate {
+  let direction = directions.next().unwrap();
+  match direction {
+    Direction::Left => coordinate.x -= 1,
+    Direction::Right => coordinate.x += 1,
+  }
+
+  if !tunnel.can_place_at(&coordinate, rock) {
+    match direction {
+      Direction::Left => coordinate.x += 1,
+      Direction::Right => coordinate.x -= 1,
     }
-  }).sum()
+  }
+
+  coordinate
+}
+
+fn fall(rock: &Shape, mut coordinate: Coordinate, tunnel: &mut Tunnel) -> Option<Coordinate> {
+  coordinate.y -= 1;
+
+  if tunnel.can_place_at(&coordinate, rock) {
+    return Some(coordinate);
+  }
+
+  coordinate.y += 1;
+  tunnel.settle_at(&coordinate, rock);
+  None
+}
+
+trait CycleIterator<T> {
+  fn cycle(&self) -> Cycler<T>;
+}
+
+impl<'a, T> CycleIterator<T> for Vec<T> {
+  fn cycle(&self) -> Cycler<T> {
+    Cycler { vec: &self, idx: 0 }
+  }
+}
+
+struct Cycler<'a, T> {
+  vec: &'a Vec<T>,
+  idx: usize,
+}
+
+impl<'a, T> Iterator for Cycler<'a, T> {
+  type Item = &'a T;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.vec.is_empty() {
+      return None;
+    }
+    let result = Some(&self.vec[self.idx]);
+    self.idx = (self.idx + 1) % self.vec.len();
+
+    result
+  }
+}
+
+impl Tunnel {
+  fn new() -> Tunnel {
+    Tunnel { height: 0, occupied: HashSet::new() }
+  }
+
+  fn start_coordinate(&self) -> Coordinate {
+    Coordinate::new(2, self.height + 3)
+  }
+
+  fn can_place_at(&self, coordinate: &Coordinate, shape: &Shape) -> bool {
+    !shape.coordinates.iter()
+      .map(|offset| coordinate + offset)
+      .any(|coordinate| self.occupied.contains(&coordinate) || coordinate.y < 0 || coordinate.x < 0 || coordinate.x >= 7)
+  }
+
+  fn settle_at(&mut self, coordinate: &Coordinate, shape: &Shape) {
+    for coordinate in shape.coordinates.iter().map(|offset| coordinate + offset) {
+      if self.height < coordinate.y + 1 {
+        self.height = coordinate.y + 1;
+      }
+      self.occupied.insert(coordinate);
+    }
+  }
 }

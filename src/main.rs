@@ -1,309 +1,153 @@
 use std::cmp::max;
+use std::collections::{HashMap, VecDeque};
 use std::{io};
-use std::io::{BufReader, Read};
+use std::io::{BufReader, BufRead};
 
-use coordinate::Coordinate;
+use regex::Regex;
 
 mod coordinate;
 
-type Coord = Coordinate<i64>;
-type Row = [bool; 7];
-
-enum Direction {
-  Left,
-  Right,
+#[derive(Debug)]
+struct Valve {
+  id: String,
+  flow_rate: u32,
+  connections: Vec<String>,
+  distances: HashMap<String, u32>,
 }
 
-struct Shape {
-  coordinates: Vec<Coord>,
-}
-
-struct Tunnel {
-  column_heights: [i64; 7],
-  floor: i64,
-  occupied: Vec<Row>,
-}
-
-struct HistoryEntry {
-  occupied: Vec<Row>,
-  floor: i64,
-  rock_count: u64,
+#[derive(Clone, Debug)]
+struct ExplorationState {
+  targets: Vec<String>,
+  current_pos: String,
+  elephant_current_pos: String,
+  score: u32,
+  remaining_time: u32,
 }
 
 fn main() -> io::Result<()> {
   let input = BufReader::new(io::stdin());
+  let valve_info_regex = Regex::new(r"Valve ([A-Z]+) has flow rate=(\d+); tunnel(?:s)? lead(?:s)? to valve(?:s)? ").unwrap();
+  let tunnels_regex = Regex::new(r"[A-Z]+").unwrap();
 
-  let all_directions = input.bytes().map(|result| match result.unwrap() as char {
-    '<' => Direction::Left,
-    '>' => Direction::Right,
-    _ => unreachable!(),
-  }).collect::<Vec<Direction>>();
+  let mut valves = input.lines().map(|result| {
+    let line = result.unwrap();
+    let captures = valve_info_regex.captures(&line).unwrap();
+    let id = captures.get(1).unwrap().as_str().to_string();
+    let flow_rate = captures.get(2).unwrap().as_str().parse::<u32>().unwrap();
 
-  let all_shapes = vec![
-    Shape { coordinates: vec![
-      Coordinate::new(0, 0),
-      Coordinate::new(1, 0),
-      Coordinate::new(2, 0),
-      Coordinate::new(3, 0),
-    ], },
-    Shape { coordinates: vec![
-      Coordinate::new(1, 0),
-      Coordinate::new(0, 1),
-      Coordinate::new(1, 1),
-      Coordinate::new(2, 1),
-      Coordinate::new(1, 2),
-    ], },
-    Shape { coordinates: vec![
-      Coordinate::new(0, 0),
-      Coordinate::new(1, 0),
-      Coordinate::new(2, 0),
-      Coordinate::new(2, 1),
-      Coordinate::new(2, 2),
-    ], },
-    Shape { coordinates: vec![
-      Coordinate::new(0, 0),
-      Coordinate::new(0, 1),
-      Coordinate::new(0, 2),
-      Coordinate::new(0, 3),
-    ], },
-    Shape { coordinates: vec![
-      Coordinate::new(0, 0),
-      Coordinate::new(1, 0),
-      Coordinate::new(0, 1),
-      Coordinate::new(1, 1),
-    ], },
-  ];
+    let connections = tunnels_regex.find_iter(&line[captures.get(0).unwrap().end()..]).map(|cap| cap.as_str().to_string()).collect::<Vec<String>>();
 
-  let mut tunnel = Tunnel::new();
-  let mut directions = all_directions.cycle();
-  let mut shapes = all_shapes.cycle();
+    (id.clone(), Valve {
+      id,
+      flow_rate,
+      connections,
+      distances: HashMap::new(),
+    })
+  }).collect::<HashMap<String, Valve>>();
 
-  let mut history: Vec<Vec<HistoryEntry>> = Vec::with_capacity(all_directions.len());
-  history.resize_with(all_directions.len(), || Vec::new());
+  let valves_with_any_value = valves.values().filter_map(|valve| {
+    if valve.flow_rate > 0 {
+      Some(valve.id.clone())
+    } else {
+      None
+    }
+  }).collect::<Vec<String>>();
 
-  let mut rock_count: u64 = 0;
-  let rock_limit = 1000000000000u64;
+  set_distances(&mut valves, &valves_with_any_value);
 
-  let mut maybe_repeat = None;
-  println!("Finding pattern");
-  'find_pattern: while rock_count < rock_limit {
-    add_rock(&mut shapes, &mut directions, &mut tunnel);
-    rock_count += 1;
+  let mut max_score = 0;
+  let mut exploration_queue = VecDeque::new();
+  exploration_queue.push_back(ExplorationState {
+    targets: valves_with_any_value,
+    current_pos: "AA".to_string(),
+    elephant_current_pos: "AA".to_string(),
+    score: 0,
+    remaining_time: 30,
+  });
 
-    if shapes.idx == 0 {
-      let this_entry = HistoryEntry::new(&tunnel, rock_count);
-      let history_entries = &mut history[directions.idx];
-      for history_entry in history_entries.iter() {
-        if *history_entry == this_entry {
-          let height_difference = this_entry.floor - history_entry.floor;
-          let rock_difference = this_entry.rock_count - history_entry.rock_count;
-          maybe_repeat = Some((rock_difference, height_difference));
-          break 'find_pattern;
-        }
+  let mut count = 0;
+  while let Some(exploration) = exploration_queue.pop_front() {
+    if exploration.targets.len() == 0 {
+      max_score = max(exploration.score, max_score);
+      continue;
+    }
+
+    let scored_targets = score_targets(&exploration.targets, &valves, &exploration.current_pos, exploration.remaining_time);
+    let this_explorations_maximum = exploration.score + scored_targets.iter().map(|(_, score, _)| score).sum::<u32>();
+    if max_score >= this_explorations_maximum {
+      // No possible path in this state will exceed the current maximum score
+      continue;
+    }
+
+    count += 1;
+
+    let mut next_states = scored_targets.into_iter().map(|(target, score, remaining_time)| {
+      let targets = exploration.targets.iter().filter(|t| *t != target).cloned().collect::<Vec<String>>();
+
+      ExplorationState {
+        current_pos: target.clone(),
+        elephant_current_pos: exploration.elephant_current_pos.clone(),
+        targets,
+        score: exploration.score + score,
+        remaining_time,
       }
+    });
 
-      history_entries.push(this_entry);
+    // Take the highest priority target for a depth first traversal
+    if let Some(state) = next_states.next() {
+      exploration_queue.push_front(state);
     }
 
-    if rock_count % (1000000000000u64 / 1000) == 0 {
-      let pct = rock_count / (1000000000000u64 / 1000);
-      println!("{}.{}%", pct / 10, pct % 10);
-    }
-  }
-
-  if rock_count == rock_limit {
-    println!("No repeats found before finishing simulation");
-    println!("{}", tunnel.height());
-
-    return Ok(());
-  }
-
-  let (repeat_rocks, repeat_height) = maybe_repeat.unwrap();
-  println!("Found pattern after {} rocks", rock_count);
-  println!("Pattern repeats every {} rocks and adds {} height", repeat_rocks, repeat_height);
-
-  let skippable_repeats = (rock_limit - rock_count) / repeat_rocks;
-  let rocks_skipped = skippable_repeats * repeat_rocks;
-  let height_skipped = skippable_repeats as i64 * repeat_height;
-  println!("Skipping ahead {} rocks (+{} height)", rocks_skipped, height_skipped);
-
-  tunnel.floor += height_skipped;
-  for col in tunnel.column_heights.iter_mut() {
-    *col += height_skipped;
-  }
-  rock_count += rocks_skipped;
-
-  println!("Simulating remaining rocks");
-  while rock_count < rock_limit {
-    add_rock(&mut shapes, &mut directions, &mut tunnel);
-    rock_count += 1;
-
-    if rock_count % (1000000000000u64 / 1000) == 0 {
-      let pct = rock_count / (1000000000000u64 / 1000);
-      println!("{}.{}%", pct / 10, pct % 10);
+    // Push the remaining targets to the end of the queue for a breadth first traversal
+    while let Some(state) = next_states.next() {
+      exploration_queue.push_back(state);
     }
   }
 
-  println!("{}", tunnel.height());
+  println!("found in {}", count);
+
+  let result = max_score;
+
+  println!("{}", result);
 
   Ok(())
 }
 
-impl HistoryEntry {
-  fn new(tunnel: &Tunnel, rock_count: u64) -> HistoryEntry {
-    let occupied = tunnel.occupied.clone();
-    HistoryEntry { occupied, floor: tunnel.floor, rock_count }
-  }
-}
-
-impl PartialEq for HistoryEntry {
-  fn eq(&self, other: &Self) -> bool {
-    self.occupied.eq(&other.occupied)
-  }
-}
-
-fn add_rock(shapes: &mut dyn Iterator<Item = &Shape>, directions: &mut dyn Iterator<Item = &Direction>, tunnel: &mut Tunnel) {
-  let mut coordinate = tunnel.start_coordinate();
-  let rock = shapes.next().unwrap();
-
-  loop {
-    coordinate = handle_jet(&rock, coordinate, directions, tunnel);
-    if let Some(coord) = fall(&rock, coordinate, tunnel) {
-      coordinate = coord;
+fn score_targets<'a>(targets: &'a [String], valves: &HashMap<String, Valve>, current: &String, remaining_time: u32) -> Vec<(&'a String, u32, u32)> {
+  let current_valve = valves.get(current).unwrap();
+  let mut scored_targets = targets.iter().map(|t| {
+    let distance = current_valve.distances.get(t).unwrap();
+    let score;
+    let time;
+    if distance + 1 < remaining_time {
+      let target = valves.get(t).unwrap();
+      time = remaining_time - distance - 1;
+      score = time * target.flow_rate;
     } else {
-      break;
-    }
-  }
-}
-
-fn handle_jet(rock: &Shape, mut coordinate: Coord, directions: &mut dyn Iterator<Item = &Direction>, tunnel: &Tunnel) -> Coord {
-  let direction = directions.next().unwrap();
-  match direction {
-    Direction::Left => coordinate.x -= 1,
-    Direction::Right => coordinate.x += 1,
-  }
-
-  if !tunnel.can_place_at(&coordinate, rock) {
-    match direction {
-      Direction::Left => coordinate.x += 1,
-      Direction::Right => coordinate.x -= 1,
-    }
-  }
-
-  coordinate
-}
-
-fn fall(rock: &Shape, mut coordinate: Coord, tunnel: &mut Tunnel) -> Option<Coord> {
-  coordinate.y -= 1;
-
-  if tunnel.can_place_at(&coordinate, rock) {
-    return Some(coordinate);
-  }
-
-  coordinate.y += 1;
-  tunnel.settle_at(&coordinate, rock);
-  None
-}
-
-trait CycleIterator<T> {
-  fn cycle(&self) -> Cycler<T>;
-}
-
-impl<'a, T> CycleIterator<T> for Vec<T> {
-  fn cycle(&self) -> Cycler<T> {
-    Cycler { vec: &self, idx: 0 }
-  }
-}
-
-struct Cycler<'a, T> {
-  vec: &'a Vec<T>,
-  idx: usize,
-}
-
-impl<'a, T> Iterator for Cycler<'a, T> {
-  type Item = &'a T;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    if self.vec.is_empty() {
-      return None;
-    }
-    let result = Some(&self.vec[self.idx]);
-    self.idx = (self.idx + 1) % self.vec.len();
-
-    result
-  }
-}
-
-impl Tunnel {
-  fn new() -> Tunnel {
-    Tunnel { column_heights: [0; 7], floor: 0, occupied: Vec::new() }
-  }
-
-  fn start_coordinate(&self) -> Coord {
-    Coordinate::new(2, self.height() + 3)
-  }
-
-  fn can_place_at(&self, position: &Coord, shape: &Shape) -> bool {
-    let floor = self.floor();
-    if position.y < floor {
-      return false;
+      time = 0;
+      score = 0;
     }
 
-    !shape.coordinates.iter()
-      .map(|offset| position + offset)
-      .any(|coordinate| coordinate.x < 0 || coordinate.x >= self.column_heights.len() as i64 || self.is_occupied(&coordinate))
-  }
+    (t, score, time)
+  }).collect::<Vec<_>>();
 
-  fn settle_at(&mut self, position: &Coord, shape: &Shape) {
-    let mut new_floor = None;
-    for coordinate in shape.coordinates.iter().map(|offset| position + offset) {
-      let height = coordinate.y + 1;
-      self.column_heights[coordinate.x as usize] = max(self.column_heights[coordinate.x as usize], height);
+  // order in descending order. Maximum score first
+  scored_targets.sort_by(|(_, a, _), (_, b, _)| b.cmp(a));
+  scored_targets
+}
 
-      self.mark_occupied(&coordinate);
+fn set_distances(valves: &mut HashMap<String, Valve>, targets: &[String]) {
+  for id in targets.iter() {
+    let mut queue = VecDeque::new();
+    queue.push_back((id.clone(), 0));
 
-      let is_new_floor = !(0..self.column_heights.len()).map(|x| Coordinate::new(x as i64, coordinate.y)).any(|coord| !self.is_occupied(&coord));
-      if is_new_floor {
-        new_floor = max(Some(coordinate.y), new_floor);
+    while let Some((target, distance)) = queue.pop_front() {
+      let target_valve = &mut valves.get_mut(&target).unwrap();
+      let distances = &mut target_valve.distances;
+      if !distances.contains_key(id) {
+        distances.insert(id.to_string(), distance);
+        queue.extend(target_valve.connections.iter().map(|id| (id.clone(), distance + 1)));
       }
     }
-
-    if let Some(floor) = new_floor {
-      self.set_floor(floor);
-    }
-  }
-
-  fn set_floor(&mut self, floor: i64) {
-    let y: usize = floor as usize - self.floor() as usize;
-    self.occupied.copy_within(y.., 0);
-    self.occupied.truncate(self.occupied.len() - y);
-    self.floor = floor;
-  }
-
-  fn mark_occupied(&mut self, position: &Coord) {
-    let y: usize = position.y as usize - self.floor() as usize;
-    let x: usize = position.x as usize;
-    if y >= self.occupied.len() {
-      self.occupied.resize(y + 1, [false; 7]);
-    }
-    self.occupied[y][x] = true;
-  }
-
-  fn is_occupied(&self, position: &Coord) -> bool {
-    let y: usize = position.y as usize - self.floor() as usize;
-    let x: usize = position.x as usize;
-    if y < self.occupied.len() {
-      self.occupied[y][x]
-    } else {
-      false
-    }
-  }
-
-  fn floor(&self) -> i64 {
-    self.floor
-  }
-
-  fn height(&self) -> i64 {
-    *self.column_heights.iter().max().unwrap()
   }
 }

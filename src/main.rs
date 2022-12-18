@@ -22,6 +22,7 @@ struct ExplorationState {
   elephant_current_pos: String,
   score: u32,
   remaining_time: u32,
+  elephant_remaining_time: u32,
 }
 
 fn main() -> io::Result<()> {
@@ -62,7 +63,8 @@ fn main() -> io::Result<()> {
     current_pos: "AA".to_string(),
     elephant_current_pos: "AA".to_string(),
     score: 0,
-    remaining_time: 30,
+    remaining_time: 26,
+    elephant_remaining_time: 26,
   });
 
   let mut count = 0;
@@ -73,7 +75,18 @@ fn main() -> io::Result<()> {
     }
 
     let scored_targets = score_targets(&exploration.targets, &valves, &exploration.current_pos, exploration.remaining_time);
-    let this_explorations_maximum = exploration.score + scored_targets.iter().map(|(_, score, _)| score).sum::<u32>();
+    let elephant_scored_targets = score_targets(&exploration.targets, &valves, &exploration.elephant_current_pos, exploration.elephant_remaining_time);
+
+    let mut max_target_scores: HashMap<&str, u32> = HashMap::with_capacity(scored_targets.len());
+    for (target, score, _) in scored_targets.iter() {
+      max_target_scores.insert(*target, *score);
+    }
+    for (target, score, _) in elephant_scored_targets.iter() {
+      let max_score = max_target_scores.get_mut(target.as_str()).unwrap();
+      *max_score = max(*score, *max_score);
+    }
+
+    let this_explorations_maximum = exploration.score + max_target_scores.values().sum::<u32>();
     if max_score >= this_explorations_maximum {
       // No possible path in this state will exceed the current maximum score
       continue;
@@ -81,26 +94,56 @@ fn main() -> io::Result<()> {
 
     count += 1;
 
-    let mut next_states = scored_targets.into_iter().map(|(target, score, remaining_time)| {
-      let targets = exploration.targets.iter().filter(|t| *t != target).cloned().collect::<Vec<String>>();
-
-      ExplorationState {
-        current_pos: target.clone(),
-        elephant_current_pos: exploration.elephant_current_pos.clone(),
-        targets,
-        score: exploration.score + score,
-        remaining_time,
+    // Elephant moves
+    if exploration.elephant_remaining_time >= exploration.remaining_time {
+      let mut next_states = elephant_scored_targets.into_iter().map(|(target, score, elephant_remaining_time)| {
+        let targets = exploration.targets.iter().filter(|t| *t != target).cloned().collect::<Vec<String>>();
+  
+        ExplorationState {
+          current_pos: exploration.current_pos.clone(),
+          elephant_current_pos: target.clone(),
+          targets,
+          score: exploration.score + score,
+          remaining_time: exploration.remaining_time,
+          elephant_remaining_time,
+        }
+      });
+  
+      // Take the highest priority target for a depth first traversal
+      if let Some(state) = next_states.next() {
+        exploration_queue.push_front(state);
       }
-    });
-
-    // Take the highest priority target for a depth first traversal
-    if let Some(state) = next_states.next() {
-      exploration_queue.push_front(state);
+  
+      // Push the remaining targets to the end of the queue for a breadth first traversal
+      while let Some(state) = next_states.next() {
+        exploration_queue.push_back(state);
+      }
     }
 
-    // Push the remaining targets to the end of the queue for a breadth first traversal
-    while let Some(state) = next_states.next() {
-      exploration_queue.push_back(state);
+    // Non-elephant moves
+    if exploration.elephant_remaining_time <= exploration.remaining_time {
+      let mut next_states = scored_targets.into_iter().map(|(target, score, remaining_time)| {
+        let targets = exploration.targets.iter().filter(|t| *t != target).cloned().collect::<Vec<String>>();
+  
+        ExplorationState {
+          current_pos: target.clone(),
+          elephant_current_pos: exploration.elephant_current_pos.clone(),
+          targets,
+          score: exploration.score + score,
+          remaining_time,
+          elephant_remaining_time: exploration.elephant_remaining_time,
+        }
+      });
+  
+      // Take the highest priority target for a depth first traversal
+      if let Some(state) = next_states.next() {
+        exploration_queue.push_front(state);
+      }
+  
+      // Push the remaining targets to the end of the queue for a breadth first traversal
+      while let Some(state) = next_states.next() {
+        exploration_queue.push_back(state);
+      }
     }
   }
 

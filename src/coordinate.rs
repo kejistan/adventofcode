@@ -2,7 +2,7 @@ use std::ops::{AddAssign, Sub, Add};
 use std::fmt::Debug;
 
 #[derive(Clone, Copy, PartialEq, Hash, Eq)]
-pub struct Coordinate<T> {
+pub struct Coordinate<T = i32> {
   pub x: T,
   pub y: T,
 }
